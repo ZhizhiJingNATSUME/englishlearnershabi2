@@ -6,6 +6,7 @@ import json
 import tempfile
 import re
 import sqlite3
+import random
 import requests
 from typing import Optional
 from datetime import datetime
@@ -115,6 +116,47 @@ def fetch_random_vocab_word(list_name: Optional[str]):
         conn.close()
 
 ensure_vocabulary_columns()
+
+def build_vocab_quiz(user_id: int):
+    """基于用户生词本生成简单测验"""
+    session = Session()
+    try:
+        items = session.query(VocabularyItem).filter_by(user_id=user_id).all()
+        if len(items) < 4:
+            return None
+        target = items[0]
+        if len(items) > 1:
+            target = items[int(datetime.utcnow().timestamp()) % len(items)]
+        target_translation = target.translation or translate_text(target.word)
+        if not target_translation:
+            return None
+        distractors = []
+        for item in items:
+            if item.id == target.id:
+                continue
+            if item.translation:
+                distractors.append(item.translation)
+            if len(distractors) >= 3:
+                break
+        while len(distractors) < 3:
+            distractor_word = fetch_random_vocab_word(None)
+            if not distractor_word:
+                break
+            distractor_translation = translate_text(distractor_word[0])
+            if distractor_translation and distractor_translation != target_translation:
+                distractors.append(distractor_translation)
+        if len(distractors) < 3:
+            return None
+        options = distractors[:3] + [target_translation]
+        random.shuffle(options)
+        return {
+            "word": target.word,
+            "question": f"What is the Chinese translation of \"{target.word}\"?",
+            "options": options,
+            "answer": target_translation
+        }
+    finally:
+        session.close()
 
 # 初始化推荐器
 recommender = ArticleRecommender()
@@ -651,6 +693,14 @@ def get_learning_word():
         "translation": translation,
         "example_translation": example_translation
     })
+
+@app.route('/api/vocabulary/quiz/<int:user_id>', methods=['GET'])
+def get_vocabulary_quiz(user_id):
+    """获取生词测验"""
+    quiz = build_vocab_quiz(user_id)
+    if not quiz:
+        return jsonify({'error': 'Not enough vocabulary data for quiz'}), 400
+    return jsonify(quiz)
 
 # ========== 阅读测试相关API ==========
 

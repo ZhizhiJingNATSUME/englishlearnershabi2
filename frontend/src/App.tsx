@@ -10,7 +10,7 @@ import WritingCoach from './components/WritingCoach';
 import SpeakingCoach from './components/SpeakingCoach';
 import { useAuth } from './hooks/useAuth';
 import * as api from './services/api';
-import type { Article, ViewType, ArticleAnalysis, LearningWord, ReadingHistory, VocabularyItem, UserStats } from './types';
+import type { Article, ViewType, ArticleAnalysis, LearningWord, ReadingHistory, VocabularyItem, UserStats, VocabularyQuizQuestion } from './types';
 import { GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 
 function App() {
@@ -21,6 +21,9 @@ function App() {
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
   const [learningWord, setLearningWord] = useState<LearningWord | null>(null);
   const [learningWordLoading, setLearningWordLoading] = useState(false);
+  const [quizQuestion, setQuizQuestion] = useState<VocabularyQuizQuestion | null>(null);
+  const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
+  const [quizFeedback, setQuizFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -56,6 +59,10 @@ function App() {
           try {
             const word = await api.getLearningWord();
             setLearningWord(word);
+            const quiz = await api.getVocabularyQuiz(user.id);
+            setQuizQuestion(quiz);
+            setQuizAnswer(null);
+            setQuizFeedback(null);
           } finally {
             setLearningWordLoading(false);
           }
@@ -151,6 +158,18 @@ function App() {
     }
   };
 
+  const refreshQuizQuestion = async () => {
+    if (!user) return;
+    try {
+      const quiz = await api.getVocabularyQuiz(user.id);
+      setQuizQuestion(quiz);
+      setQuizAnswer(null);
+      setQuizFeedback(null);
+    } catch (err) {
+      console.error('Failed to load vocabulary quiz:', err);
+    }
+  };
+
   const handleAddLearningWord = async () => {
     if (!learningWord?.word) return;
     await handleSaveVocab(learningWord.word, {
@@ -160,6 +179,12 @@ function App() {
       example_translation: learningWord.example_translation
     });
     await refreshLearningWord();
+  };
+
+  const handleQuizAnswer = (answer: string) => {
+    if (!quizQuestion) return;
+    setQuizAnswer(answer);
+    setQuizFeedback(answer === quizQuestion.answer ? 'correct' : 'incorrect');
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -322,6 +347,11 @@ function App() {
                 isLearningWordLoading={learningWordLoading}
                 onRefreshLearningWord={refreshLearningWord}
                 onAddLearningWord={handleAddLearningWord}
+                quizQuestion={quizQuestion}
+                quizAnswer={quizAnswer}
+                quizFeedback={quizFeedback}
+                onAnswerQuiz={handleQuizAnswer}
+                onRefreshQuiz={refreshQuizQuestion}
               />
             </div>
           )}
