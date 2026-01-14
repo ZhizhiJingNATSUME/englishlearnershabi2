@@ -1,4 +1,4 @@
-import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, TestQuestion, TestArticle, TestResult } from '../types';
+import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, TestQuestion, TestArticle, TestResult } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 
@@ -65,7 +65,16 @@ export const getReadingHistory = async (userId: number): Promise<{ history: Read
 };
 
 // Vocabulary
-export const addVocabulary = async (data: { user_id: number; word: string; article_id?: number }) => {
+export const addVocabulary = async (data: {
+    user_id: number;
+    word: string;
+    article_id?: number;
+    source_article_id?: number;
+    definition?: string;
+    translation?: string;
+    example_sentence?: string;
+    example_translation?: string;
+}) => {
     return handleResponse(await fetch(`${API_BASE}/vocabulary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -75,6 +84,17 @@ export const addVocabulary = async (data: { user_id: number; word: string; artic
 
 export const getVocabulary = async (userId: number): Promise<{ vocabulary: VocabularyItem[] }> => {
     return handleResponse(await fetch(`${API_BASE}/vocabulary/${userId}`));
+};
+
+export const getLearningWord = async (listName?: string): Promise<LearningWord> => {
+    const params = new URLSearchParams();
+    if (listName) params.append('list_name', listName);
+    const query = params.toString();
+    return handleResponse(await fetch(`${API_BASE}/vocabulary/learn${query ? `?${query}` : ''}`));
+};
+
+export const getVocabularyQuiz = async (userId: number): Promise<VocabularyQuizQuestion> => {
+    return handleResponse(await fetch(`${API_BASE}/vocabulary/quiz/${userId}`));
 };
 
 // Stats

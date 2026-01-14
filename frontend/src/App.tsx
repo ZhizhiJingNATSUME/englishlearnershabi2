@@ -10,7 +10,7 @@ import WritingCoach from './components/WritingCoach';
 import SpeakingCoach from './components/SpeakingCoach';
 import { useAuth } from './hooks/useAuth';
 import * as api from './services/api';
-import type { Article, ViewType, ArticleAnalysis, ReadingHistory, VocabularyItem, UserStats } from './types';
+import type { Article, ViewType, ArticleAnalysis, LearningWord, ReadingHistory, VocabularyItem, UserStats, VocabularyQuizQuestion } from './types';
 import { GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 
 function App() {
@@ -19,6 +19,11 @@ function App() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [history, setHistory] = useState<ReadingHistory[]>([]);
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
+  const [learningWord, setLearningWord] = useState<LearningWord | null>(null);
+  const [learningWordLoading, setLearningWordLoading] = useState(false);
+  const [quizQuestion, setQuizQuestion] = useState<VocabularyQuizQuestion | null>(null);
+  const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
+  const [quizFeedback, setQuizFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -50,6 +55,17 @@ function App() {
         } else if (currentView === 'vocabulary') {
           const res = await api.getVocabulary(user.id);
           setVocabulary(res.vocabulary);
+          setLearningWordLoading(true);
+          try {
+            const word = await api.getLearningWord();
+            setLearningWord(word);
+            const quiz = await api.getVocabularyQuiz(user.id);
+            setQuizQuestion(quiz);
+            setQuizAnswer(null);
+            setQuizFeedback(null);
+          } finally {
+            setLearningWordLoading(false);
+          }
         } else if (currentView === 'stats') {
           const res = await api.getUserStats(user.id);
           console.log('📊 Stats API response:', res);
@@ -101,13 +117,24 @@ function App() {
     }
   };
 
-  const handleSaveVocab = async (word: string) => {
-    if (!user || !activeArticle) return;
+  const handleSaveVocab = async (word: string, details?: {
+    definition?: string;
+    translation?: string;
+    example_sentence?: string;
+    example_translation?: string;
+    source_article_id?: number;
+  }) => {
+    if (!user) return;
     try {
       await api.addVocabulary({
         user_id: user.id,
         word,
-        article_id: activeArticle.id
+        article_id: activeArticle?.id,
+        source_article_id: details?.source_article_id,
+        definition: details?.definition,
+        translation: details?.translation,
+        example_sentence: details?.example_sentence,
+        example_translation: details?.example_translation
       });
       if (currentView === 'vocabulary') {
         const res = await api.getVocabulary(user.id);
@@ -116,6 +143,48 @@ function App() {
     } catch (err) {
       console.error('Failed to save vocabulary:', err);
     }
+  };
+
+  const refreshLearningWord = async () => {
+    if (!user) return;
+    setLearningWordLoading(true);
+    try {
+      const word = await api.getLearningWord();
+      setLearningWord(word);
+    } catch (err) {
+      console.error('Failed to load learning word:', err);
+    } finally {
+      setLearningWordLoading(false);
+    }
+  };
+
+  const refreshQuizQuestion = async () => {
+    if (!user) return;
+    try {
+      const quiz = await api.getVocabularyQuiz(user.id);
+      setQuizQuestion(quiz);
+      setQuizAnswer(null);
+      setQuizFeedback(null);
+    } catch (err) {
+      console.error('Failed to load vocabulary quiz:', err);
+    }
+  };
+
+  const handleAddLearningWord = async () => {
+    if (!learningWord?.word) return;
+    await handleSaveVocab(learningWord.word, {
+      definition: learningWord.definition,
+      translation: learningWord.translation,
+      example_sentence: learningWord.example_sentence,
+      example_translation: learningWord.example_translation
+    });
+    await refreshLearningWord();
+  };
+
+  const handleQuizAnswer = (answer: string) => {
+    if (!quizQuestion) return;
+    setQuizAnswer(answer);
+    setQuizFeedback(answer === quizQuestion.answer ? 'correct' : 'incorrect');
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -272,7 +341,18 @@ function App() {
 
           {currentView === 'vocabulary' && (
             <div className="animate-in slide-in-from-bottom-4 duration-500">
-              <VocabularyList vocabulary={vocabulary} />
+              <VocabularyList
+                vocabulary={vocabulary}
+                learningWord={learningWord}
+                isLearningWordLoading={learningWordLoading}
+                onRefreshLearningWord={refreshLearningWord}
+                onAddLearningWord={handleAddLearningWord}
+                quizQuestion={quizQuestion}
+                quizAnswer={quizAnswer}
+                quizFeedback={quizFeedback}
+                onAnswerQuiz={handleQuizAnswer}
+                onRefreshQuiz={refreshQuizQuestion}
+              />
             </div>
           )}
 

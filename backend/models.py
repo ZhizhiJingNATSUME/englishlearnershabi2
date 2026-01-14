@@ -151,6 +151,8 @@ class VocabularyItem(Base):
     # 词汇信息
     definition = Column(Text)
     example_sentence = Column(Text)
+    translation = Column(Text)
+    example_translation = Column(Text)
     source_article_id = Column(Integer, ForeignKey('articles.id'))
     
     # 学习进度
@@ -162,6 +164,15 @@ class VocabularyItem(Base):
     
     # 关系
     user = relationship("User", back_populates="vocabulary_items")
+
+class StandardVocabulary(Base):
+    """标准词库"""
+    __tablename__ = 'standard_vocabulary'
+
+    id = Column(Integer, primary_key=True)
+    list_name = Column(String(50))
+    word = Column(String(100), nullable=False)
+    definition = Column(Text)
 
 class WritingHistory(Base):
     """写作历史记录"""
@@ -227,4 +238,3 @@ def get_session(engine):
     """获取数据库会话"""
     Session = sessionmaker(bind=engine)
     return Session()
-
