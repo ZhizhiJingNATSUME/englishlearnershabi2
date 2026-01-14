@@ -66,6 +66,14 @@ export interface VocabularyQuizQuestion {
     answer: string;
 }
 
+export interface DiscoverStats {
+    total_fetched: number;
+    total_scraped: number;
+    total_analyzed: number;
+    failed: number;
+    duplicates: number;
+}
+
 export interface ReadingHistory {
     id: number;
     article_id: number;

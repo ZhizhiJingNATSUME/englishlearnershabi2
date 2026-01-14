@@ -1,4 +1,4 @@
-import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, TestQuestion, TestArticle, TestResult } from '../types';
+import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 
@@ -95,6 +95,20 @@ export const getLearningWord = async (listName?: string): Promise<LearningWord> 
 
 export const getVocabularyQuiz = async (userId: number): Promise<VocabularyQuizQuestion> => {
     return handleResponse(await fetch(`${API_BASE}/vocabulary/quiz/${userId}`));
+};
+
+export const discoverArticles = async (data: {
+    user_id: number;
+    categories: string[];
+    sources?: string[];
+    count?: number;
+    language?: string;
+}): Promise<{ stats: DiscoverStats; recommendations: Article[] }> => {
+    return handleResponse(await fetch(`${API_BASE}/discover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    }));
 };
 
 // Stats

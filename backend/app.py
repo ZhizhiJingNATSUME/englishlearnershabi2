@@ -7,6 +7,7 @@ import tempfile
 import re
 import sqlite3
 import random
+import asyncio
 import requests
 from typing import Optional
 from datetime import datetime
@@ -337,6 +338,58 @@ def login():
         
     finally:
         session.close()
+
+# ========== Discover / Pipeline API ==========
+
+@app.route('/api/discover', methods=['POST'])
+def discover_articles():
+    """根据兴趣主题抓取并推荐最新文章"""
+    data = request.json or {}
+    user_id = data.get('user_id')
+    categories = data.get('categories') or []
+    sources = data.get('sources')
+    count = data.get('count', 3)
+    language = data.get('language', 'English')
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    if not categories:
+        return jsonify({'error': 'categories is required'}), 400
+
+    session = Session()
+    try:
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        score = round(1 / len(categories), 3)
+        user.interests = {cat: score for cat in categories}
+        session.commit()
+    finally:
+        session.close()
+
+    try:
+        from data_pipeline import DataPipeline
+        pipeline = DataPipeline(
+            sources=sources,
+            enable_llm=True,
+            target_language=language,
+            db_url=DATABASE_URL
+        )
+        stats = asyncio.run(pipeline.run(categories=categories, articles_per_category=count))
+    except Exception as e:
+        return jsonify({'error': f'Pipeline failed: {e}'}), 500
+
+    init_recommender()
+
+    session = Session()
+    try:
+        recommendations = recommender.recommend_hybrid(session, user_id, 10)
+    finally:
+        session.close()
+
+    return jsonify({'stats': stats, 'recommendations': recommendations})
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
