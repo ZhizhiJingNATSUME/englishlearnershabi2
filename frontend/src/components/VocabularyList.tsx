@@ -1,13 +1,23 @@
 // src/components/VocabularyList.tsx
 import React from 'react';
-import { BookMarked, Search, Volume2 } from 'lucide-react';
-import type { VocabularyItem } from '../types';
+import { BookMarked, RefreshCcw, Search, Volume2 } from 'lucide-react';
+import type { LearningWord, VocabularyItem } from '../types';
 
 interface VocabularyListProps {
     vocabulary: VocabularyItem[];
+    learningWord: LearningWord | null;
+    isLearningWordLoading: boolean;
+    onRefreshLearningWord: () => void;
+    onAddLearningWord: () => void;
 }
 
-const VocabularyList: React.FC<VocabularyListProps> = ({ vocabulary }) => {
+const VocabularyList: React.FC<VocabularyListProps> = ({
+    vocabulary,
+    learningWord,
+    isLearningWordLoading,
+    onRefreshLearningWord,
+    onAddLearningWord
+}) => {
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -22,6 +32,58 @@ const VocabularyList: React.FC<VocabularyListProps> = ({ vocabulary }) => {
                         placeholder="Search words..."
                         className="pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64 transition-all"
                     />
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Learn new vocabulary</p>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {learningWord?.word || 'Loading...'}
+                        </h2>
+                        {learningWord?.translation && (
+                            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+                                {learningWord.translation}
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={onRefreshLearningWord}
+                            disabled={isLearningWordLoading}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-60"
+                        >
+                            <RefreshCcw size={16} className={isLearningWordLoading ? 'animate-spin' : ''} />
+                            New word
+                        </button>
+                        <button
+                            onClick={onAddLearningWord}
+                            disabled={!learningWord?.word}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-60"
+                        >
+                            Add to word bank
+                        </button>
+                    </div>
+                </div>
+                <div className="mt-4 space-y-3">
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {learningWord?.definition || 'Definition will appear here once loaded.'}
+                    </p>
+                    {learningWord?.example_sentence && (
+                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 text-sm text-slate-600 dark:text-slate-300">
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">Example</p>
+                            <p className="mt-1 italic">{learningWord.example_sentence}</p>
+                            {learningWord.example_translation && (
+                                <p className="mt-2 text-emerald-600 dark:text-emerald-400">{learningWord.example_translation}</p>
+                            )}
+                        </div>
+                    )}
+                    {learningWord?.list_name && (
+                        <span className="inline-flex items-center px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            {learningWord.list_name} list
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -59,6 +121,21 @@ const VocabularyList: React.FC<VocabularyListProps> = ({ vocabulary }) => {
                             <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 leading-relaxed italic border-l-2 border-slate-100 dark:border-slate-800 pl-3">
                                 {item.definition || 'No definition available.'}
                             </p>
+                            {(item.translation || item.example_sentence) && (
+                                <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 space-y-2">
+                                    {item.translation && (
+                                        <p className="font-semibold text-emerald-600 dark:text-emerald-400">{item.translation}</p>
+                                    )}
+                                    {item.example_sentence && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
+                                            <p className="italic">{item.example_sentence}</p>
+                                            {item.example_translation && (
+                                                <p className="mt-2 text-emerald-600 dark:text-emerald-400">{item.example_translation}</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
