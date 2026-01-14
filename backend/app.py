@@ -53,22 +53,46 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN
     """使用免费翻译API翻译文本"""
     if not text:
         return ""
+    cleaned = text.strip()
+    if not cleaned:
+        return ""
+    translation = ""
     try:
         response = requests.get(
             "https://api.mymemory.translated.net/get",
-            params={"q": text, "langpair": f"{source_lang}|{target_lang}"},
+            params={"q": cleaned, "langpair": f"{source_lang}|{target_lang}"},
             timeout=10
         )
         if response.ok:
             data = response.json()
-            return data.get("responseData", {}).get("translatedText", "") or ""
+            translation = data.get("responseData", {}).get("translatedText", "") or ""
+    except requests.RequestException:
+        translation = ""
+    if translation and translation.strip().lower() != cleaned.lower():
+        return translation
+    try:
+        response = requests.post(
+            "https://libretranslate.de/translate",
+            json={
+                "q": cleaned,
+                "source": source_lang,
+                "target": target_lang,
+                "format": "text"
+            },
+            timeout=10
+        )
+        if response.ok:
+            data = response.json()
+            fallback = data.get("translatedText", "") or ""
+            if fallback and fallback.strip().lower() != cleaned.lower():
+                return fallback
     except requests.RequestException:
         return ""
-    return ""
+    return translation if translation.strip().lower() != cleaned.lower() else ""
 
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
-    data = {"definition": "", "example_sentence": ""}
+    data = {"definition": "", "example_sentence": "", "part_of_speech": ""}
     try:
         response = requests.get(
             f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}",
@@ -90,9 +114,43 @@ def fetch_dictionary_entry(word: str) -> dict:
             definition_entry = definitions[0]
             data["definition"] = definition_entry.get("definition", "")
             data["example_sentence"] = definition_entry.get("example", "")
+        data["part_of_speech"] = meaning.get("partOfSpeech", "")
     except (requests.RequestException, IndexError, KeyError, ValueError):
         return data
     return data
+
+def build_example_sentence(word: str, part_of_speech: str) -> str:
+    """生成更自然的示例句"""
+    templates = {
+        "noun": [
+            "The {word} plays an important role in daily life.",
+            "She wrote a report about the {word}.",
+            "We discussed the {word} during the meeting."
+        ],
+        "verb": [
+            "They decided to {word} before the deadline.",
+            "She will {word} the plan tomorrow.",
+            "Please {word} your answer carefully."
+        ],
+        "adjective": [
+            "It was a {word} decision to make.",
+            "The results were surprisingly {word}.",
+            "He felt {word} after the long trip."
+        ],
+        "adverb": [
+            "She spoke {word} during the presentation.",
+            "The team worked {word} to finish on time.",
+            "He responded {word} to the request."
+        ],
+        "default": [
+            "They used the word \"{word}\" in the discussion.",
+            "He is trying to remember the word \"{word}\".",
+            "The article included the term \"{word}\"."
+        ]
+    }
+    key = part_of_speech.lower() if part_of_speech else "default"
+    choices = templates.get(key, templates["default"])
+    return random.choice(choices).format(word=word)
 
 def fetch_random_vocab_word(list_name: Optional[str]):
     """从词库中随机抽取单词"""
@@ -682,7 +740,10 @@ def get_learning_word():
         return jsonify({'error': 'Vocabulary list not found'}), 404
     word, actual_list = word_row
     dictionary_data = fetch_dictionary_entry(word)
-    example_sentence = dictionary_data.get("example_sentence") or f"I learned the word \"{word}\" today."
+    example_sentence = dictionary_data.get("example_sentence") or build_example_sentence(
+        word,
+        dictionary_data.get("part_of_speech", "")
+    )
     translation = translate_text(word)
     example_translation = translate_text(example_sentence)
     return jsonify({
