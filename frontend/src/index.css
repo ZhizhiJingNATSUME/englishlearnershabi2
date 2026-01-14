@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-learning-vocab: #10b981;
+  --color-learning-collocation: #f59e0b;
+  --color-learning-grammar: #3b82f6;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50;
+  }
+}
+
+/* Custom styles for the reader using Tailwind v4 compatible syntax */
+.highlight-vocabulary {
+  @apply bg-[var(--color-learning-vocab)]/10 dark:bg-[var(--color-learning-vocab)]/20 border-b-2 border-[var(--color-learning-vocab)] cursor-help;
+}
+
+.highlight-collocation {
+  @apply bg-[var(--color-learning-collocation)]/10 dark:bg-[var(--color-learning-collocation)]/20 border-b-2 border-[var(--color-learning-collocation)] cursor-help;
+}
+
+.highlight-grammar {
+  @apply border-b-2 border-[var(--color-learning-grammar)] border-dashed cursor-help;
+}
+
+.highlight-grammar-anchor {
+  @apply bg-[var(--color-learning-grammar)]/10 dark:bg-[var(--color-learning-grammar)]/20;
+}
