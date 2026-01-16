@@ -52,6 +52,30 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
             </div>
 
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Vocabulary lists</p>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Pick a list</h2>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {['CET4', 'CET6', 'SAT', 'IELTS&TOEFL'].map(listName => (
+                            <button
+                                key={listName}
+                                onClick={() => onSelectVocabList(listName)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wide border transition ${
+                                    selectedVocabList === listName
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
+                                        : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300 hover:border-blue-300'
+                                }`}
+                            >
+                                {listName}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div className="space-y-2">
                         <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Learn new vocabulary</p>
@@ -82,21 +106,6 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                         </button>
                     </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                    {['CET4', 'CET6', 'SAT', 'IELTS&TOEFL'].map(listName => (
-                        <button
-                            key={listName}
-                            onClick={() => onSelectVocabList(listName)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wide border transition ${
-                                selectedVocabList === listName
-                                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
-                                    : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300 hover:border-blue-300'
-                            }`}
-                        >
-                            {listName}
-                        </button>
-                    ))}
-                </div>
                 {learningWordError && (
                     <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
                         {learningWordError}
@@ -126,10 +135,11 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div className="space-y-2">
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Quick quiz</p>
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Practice</p>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Quick quiz</h2>
+                        <p className="text-sm text-slate-500">
                             {quizQuestion?.question || 'Need more words to start a quiz.'}
-                        </h2>
+                        </p>
                     </div>
                     <button
                         onClick={onRefreshQuiz}
