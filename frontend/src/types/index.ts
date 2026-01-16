@@ -41,10 +41,37 @@ export interface VocabularyItem {
     id?: number;
     word: string;
     definition?: string;
+    translation?: string;
+    example_sentence?: string;
+    example_translation?: string;
     pronunciation?: string;
     cefr?: string;
     source_article_id?: number;
     created_at?: string;
+}
+
+export interface LearningWord {
+    word: string;
+    list_name?: string;
+    definition?: string;
+    translation?: string;
+    example_sentence?: string;
+    example_translation?: string;
+}
+
+export interface VocabularyQuizQuestion {
+    word: string;
+    question: string;
+    options: string[];
+    answer: string;
+}
+
+export interface DiscoverStats {
+    total_fetched: number;
+    total_scraped: number;
+    total_analyzed: number;
+    failed: number;
+    duplicates: number;
 }
 
 export interface ReadingHistory {
