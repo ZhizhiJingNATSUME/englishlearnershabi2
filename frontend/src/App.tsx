@@ -29,6 +29,7 @@ function App() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState<string[]>(['technology', 'science']);
   const [discoverMessage, setDiscoverMessage] = useState('');
+  const [selectedVocabList, setSelectedVocabList] = useState('IELTS&TOEFL');
 
   // Reader state
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
@@ -60,7 +61,7 @@ function App() {
           setVocabulary(res.vocabulary);
           setLearningWordLoading(true);
           try {
-            const word = await api.getLearningWord();
+            const word = await api.getLearningWord(selectedVocabList);
             setLearningWord(word);
             const quiz = await api.getVocabularyQuiz(user.id);
             setQuizQuestion(quiz);
@@ -83,7 +84,33 @@ function App() {
     };
 
     fetchData();
-  }, [user, currentView]);
+  }, [user, currentView, selectedVocabList]);
+
+  const handleDiscover = async () => {
+    if (!user) return;
+    if (selectedTopics.length === 0) {
+      setDiscoverMessage('Please select at least one topic.');
+      return;
+    }
+    setIsDiscovering(true);
+    setDiscoverMessage('');
+    try {
+      const res = await api.discoverArticles({
+        user_id: user.id,
+        categories: selectedTopics,
+        sources: ['newsapi', 'voa', 'wikipedia'],
+        count: 3,
+        language: 'English'
+      });
+      setArticles(res.recommendations);
+      setDiscoverMessage(`Fetched ${res.stats.total_scraped} new articles.`);
+    } catch (err) {
+      console.error('Discover failed:', err);
+      setDiscoverMessage('Failed to fetch new articles. Please try again.');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
 
   const handleDiscover = async () => {
     if (!user) return;
@@ -178,7 +205,7 @@ function App() {
     if (!user) return;
     setLearningWordLoading(true);
     try {
-      const word = await api.getLearningWord();
+      const word = await api.getLearningWord(selectedVocabList);
       setLearningWord(word);
     } catch (err) {
       console.error('Failed to load learning word:', err);
@@ -420,6 +447,8 @@ function App() {
                 isLearningWordLoading={learningWordLoading}
                 onRefreshLearningWord={refreshLearningWord}
                 onAddLearningWord={handleAddLearningWord}
+                selectedVocabList={selectedVocabList}
+                onSelectVocabList={setSelectedVocabList}
                 quizQuestion={quizQuestion}
                 quizAnswer={quizAnswer}
                 quizFeedback={quizFeedback}

@@ -9,6 +9,8 @@ interface VocabularyListProps {
     isLearningWordLoading: boolean;
     onRefreshLearningWord: () => void;
     onAddLearningWord: () => void;
+    selectedVocabList: string;
+    onSelectVocabList: (listName: string) => void;
     quizQuestion: VocabularyQuizQuestion | null;
     quizAnswer: string | null;
     quizFeedback: 'correct' | 'incorrect' | null;
@@ -22,6 +24,8 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
     isLearningWordLoading,
     onRefreshLearningWord,
     onAddLearningWord,
+    selectedVocabList,
+    onSelectVocabList,
     quizQuestion,
     quizAnswer,
     quizFeedback,
@@ -75,6 +79,21 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                             Add to word bank
                         </button>
                     </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    {['CET4', 'CET6', 'SAT', 'IELTS&TOEFL'].map(listName => (
+                        <button
+                            key={listName}
+                            onClick={() => onSelectVocabList(listName)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wide border transition ${
+                                selectedVocabList === listName
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
+                                    : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300 hover:border-blue-300'
+                            }`}
+                        >
+                            {listName}
+                        </button>
+                    ))}
                 </div>
                 <div className="mt-4 space-y-3">
                     <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">

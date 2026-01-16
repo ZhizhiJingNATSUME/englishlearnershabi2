@@ -161,10 +161,16 @@ def fetch_random_vocab_word(list_name: Optional[str]):
     try:
         cursor = conn.cursor()
         if list_name:
-            cursor.execute(
-                "SELECT word, list_name FROM standard_vocabulary WHERE list_name = ? ORDER BY RANDOM() LIMIT 1",
-                (list_name,)
-            )
+            if list_name.lower() == "ielts&toefl":
+                cursor.execute(
+                    "SELECT word, list_name FROM standard_vocabulary WHERE list_name IN (?, ?) ORDER BY RANDOM() LIMIT 1",
+                    ("IELTS", "TOEFL")
+                )
+            else:
+                cursor.execute(
+                    "SELECT word, list_name FROM standard_vocabulary WHERE list_name = ? ORDER BY RANDOM() LIMIT 1",
+                    (list_name,)
+                )
         else:
             cursor.execute(
                 "SELECT word, list_name FROM standard_vocabulary ORDER BY RANDOM() LIMIT 1"
