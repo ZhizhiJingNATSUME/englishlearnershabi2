@@ -86,33 +86,7 @@ function App() {
     fetchData();
   }, [user, currentView, selectedVocabList]);
 
-  const handleDiscover = async () => {
-    if (!user) return;
-    if (selectedTopics.length === 0) {
-      setDiscoverMessage('Please select at least one topic.');
-      return;
-    }
-    setIsDiscovering(true);
-    setDiscoverMessage('');
-    try {
-      const res = await api.discoverArticles({
-        user_id: user.id,
-        categories: selectedTopics,
-        sources: ['newsapi', 'voa', 'wikipedia'],
-        count: 3,
-        language: 'English'
-      });
-      setArticles(res.recommendations);
-      setDiscoverMessage(`Fetched ${res.stats.total_scraped} new articles.`);
-    } catch (err) {
-      console.error('Discover failed:', err);
-      setDiscoverMessage('Failed to fetch new articles. Please try again.');
-    } finally {
-      setIsDiscovering(false);
-    }
-  };
-
-  const handleDiscover = async () => {
+  const handleDiscoverFetch = async () => {
     if (!user) return;
     if (selectedTopics.length === 0) {
       setDiscoverMessage('Please select at least one topic.');
@@ -336,7 +310,7 @@ function App() {
                     <p className="text-sm text-slate-500">We will fetch the latest articles and analyze them for you.</p>
                   </div>
                   <button
-                    onClick={handleDiscover}
+                    onClick={handleDiscoverFetch}
                     disabled={isDiscovering}
                     className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition disabled:opacity-60"
                   >
