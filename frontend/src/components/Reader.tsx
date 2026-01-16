@@ -14,7 +14,12 @@ interface ReaderProps {
     article: Article;
     analysis: ArticleAnalysis | null;
     onClose: () => void;
-    onSaveVocabulary: (word: string) => void;
+    onSaveVocabulary: (word: string, details?: {
+        definition?: string;
+        translation?: string;
+        example_sentence?: string;
+        example_translation?: string;
+    }) => void;
 }
 
 const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocabulary }) => {
