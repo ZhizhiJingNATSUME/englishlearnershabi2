@@ -5,6 +5,7 @@ import SwipeDeck from './components/SwipeDeck';
 import ArticleCard from './components/ArticleCard';
 import Reader from './components/Reader';
 import VocabularyList from './components/VocabularyList';
+import VocabularyPractice from './components/VocabularyPractice';
 import ReadingTest from './components/ReadingTest';
 import WritingCoach from './components/WritingCoach';
 import SpeakingCoach from './components/SpeakingCoach';
@@ -21,11 +22,16 @@ function App() {
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
   const [learningWord, setLearningWord] = useState<LearningWord | null>(null);
   const [learningWordLoading, setLearningWordLoading] = useState(false);
+  const [learningWordError, setLearningWordError] = useState('');
   const [quizQuestion, setQuizQuestion] = useState<VocabularyQuizQuestion | null>(null);
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>(['technology', 'science']);
+  const [discoverMessage, setDiscoverMessage] = useState('');
+  const [selectedVocabList, setSelectedVocabList] = useState('');
 
   // Reader state
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
@@ -57,15 +63,22 @@ function App() {
           setVocabulary(res.vocabulary);
           setLearningWordLoading(true);
           try {
-            const word = await api.getLearningWord();
+            if (!selectedVocabList) {
+              setLearningWord(null);
+              setLearningWordError('Select a vocabulary list to get started.');
+              return;
+            }
+            const word = await api.getLearningWord(selectedVocabList);
             setLearningWord(word);
-            const quiz = await api.getVocabularyQuiz(user.id);
-            setQuizQuestion(quiz);
-            setQuizAnswer(null);
-            setQuizFeedback(null);
+            setLearningWordError('');
           } finally {
             setLearningWordLoading(false);
           }
+        } else if (currentView === 'vocabulary_test') {
+          const quiz = await api.getVocabularyQuiz(user.id);
+          setQuizQuestion(quiz);
+          setQuizAnswer(null);
+          setQuizFeedback(null);
         } else if (currentView === 'stats') {
           const res = await api.getUserStats(user.id);
           console.log('📊 Stats API response:', res);
@@ -80,7 +93,33 @@ function App() {
     };
 
     fetchData();
-  }, [user, currentView]);
+  }, [user, currentView, selectedVocabList]);
+
+  const handleDiscoverFetch = async () => {
+    if (!user) return;
+    if (selectedTopics.length === 0) {
+      setDiscoverMessage('Please select at least one topic.');
+      return;
+    }
+    setIsDiscovering(true);
+    setDiscoverMessage('');
+    try {
+      const res = await api.discoverArticles({
+        user_id: user.id,
+        categories: selectedTopics,
+        sources: ['newsapi', 'voa', 'wikipedia'],
+        count: 3,
+        language: 'English'
+      });
+      setArticles(res.recommendations);
+      setDiscoverMessage(`Fetched ${res.stats.total_scraped} new articles.`);
+    } catch (err) {
+      console.error('Discover failed:', err);
+      setDiscoverMessage('Failed to fetch new articles. Please try again.');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
 
   const handleOpenArticle = async (article: Article) => {
     // 如果有 summary 但没有 content，或者 summary 是截断的 content
@@ -149,10 +188,18 @@ function App() {
     if (!user) return;
     setLearningWordLoading(true);
     try {
-      const word = await api.getLearningWord();
+      if (!selectedVocabList) {
+        setLearningWord(null);
+        setLearningWordError('Select a vocabulary list to get started.');
+        return;
+      }
+      const word = await api.getLearningWord(selectedVocabList);
       setLearningWord(word);
+      setLearningWordError('');
     } catch (err) {
       console.error('Failed to load learning word:', err);
+      setLearningWord(null);
+      setLearningWordError('No words available for this list yet.');
     } finally {
       setLearningWordLoading(false);
     }
@@ -273,6 +320,50 @@ function App() {
                 <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Discover</h1>
                 <p className="text-slate-500">Swipe through articles picked just for your {user.english_level} level.</p>
               </div>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-bold dark:text-white">Choose topics</h2>
+                    <p className="text-sm text-slate-500">We will fetch the latest articles and analyze them for you.</p>
+                  </div>
+                  <button
+                    onClick={handleDiscoverFetch}
+                    disabled={isDiscovering}
+                    className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition disabled:opacity-60"
+                  >
+                    {isDiscovering ? 'Fetching...' : 'Fetch latest articles'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {['technology', 'science', 'health', 'business', 'education', 'culture', 'sports', 'environment'].map(topic => (
+                    <label
+                      key={topic}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold capitalize cursor-pointer transition ${
+                        selectedTopics.includes(topic)
+                          ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-blue-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTopics.includes(topic)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTopics([...selectedTopics, topic]);
+                          } else {
+                            setSelectedTopics(selectedTopics.filter(item => item !== topic));
+                          }
+                        }}
+                        className="accent-blue-600"
+                      />
+                      {topic}
+                    </label>
+                  ))}
+                </div>
+                {discoverMessage && (
+                  <p className="text-sm text-slate-500">{discoverMessage}</p>
+                )}
+              </div>
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-24 space-y-4">
                   <Loader2 className="animate-spin text-blue-600" size={48} />
@@ -347,6 +438,16 @@ function App() {
                 isLearningWordLoading={learningWordLoading}
                 onRefreshLearningWord={refreshLearningWord}
                 onAddLearningWord={handleAddLearningWord}
+                learningWordError={learningWordError}
+                selectedVocabList={selectedVocabList}
+                onSelectVocabList={setSelectedVocabList}
+              />
+            </div>
+          )}
+
+          {currentView === 'vocabulary_test' && (
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
+              <VocabularyPractice
                 quizQuestion={quizQuestion}
                 quizAnswer={quizAnswer}
                 quizFeedback={quizFeedback}

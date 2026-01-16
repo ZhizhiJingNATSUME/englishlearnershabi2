@@ -7,6 +7,8 @@ import tempfile
 import re
 import sqlite3
 import random
+import asyncio
+import csv
 import requests
 from typing import Optional
 from datetime import datetime
@@ -160,10 +162,16 @@ def fetch_random_vocab_word(list_name: Optional[str]):
     try:
         cursor = conn.cursor()
         if list_name:
-            cursor.execute(
-                "SELECT word, list_name FROM standard_vocabulary WHERE list_name = ? ORDER BY RANDOM() LIMIT 1",
-                (list_name,)
-            )
+            if list_name.lower() == "ielts&toefl":
+                cursor.execute(
+                    "SELECT word, list_name FROM standard_vocabulary WHERE list_name IN (?, ?) ORDER BY RANDOM() LIMIT 1",
+                    ("IELTS", "TOEFL")
+                )
+            else:
+                cursor.execute(
+                    "SELECT word, list_name FROM standard_vocabulary WHERE list_name = ? ORDER BY RANDOM() LIMIT 1",
+                    (list_name,)
+                )
         else:
             cursor.execute(
                 "SELECT word, list_name FROM standard_vocabulary ORDER BY RANDOM() LIMIT 1"
@@ -172,6 +180,50 @@ def fetch_random_vocab_word(list_name: Optional[str]):
         return row
     finally:
         conn.close()
+
+def load_vocab_list_from_csv(list_name: str, csv_filename: str) -> bool:
+    """从 CSV 导入词库"""
+    csv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', csv_filename))
+    if not os.path.exists(csv_path):
+        return False
+    conn = sqlite3.connect(VOCAB_LIST_DB_PATH)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM standard_vocabulary WHERE list_name = ?", (list_name,))
+        existing_count = cursor.fetchone()[0]
+        if existing_count > 0:
+            return True
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.reader(f)
+            rows = []
+            for row in reader:
+                if not row:
+                    continue
+                word_text = row[0].strip()
+                definition = row[1].strip() if len(row) > 1 else None
+                if word_text:
+                    rows.append((list_name, word_text, definition))
+        if rows:
+            cursor.executemany(
+                "INSERT INTO standard_vocabulary (list_name, word, definition) VALUES (?, ?, ?)",
+                rows
+            )
+            conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def ensure_vocab_list_loaded(list_name: str) -> bool:
+    """确保词库列表已加载"""
+    list_map = {
+        "CET4": "4_random_350_words.csv",
+        "CET6": "6_random_350_words.csv",
+        "SAT": "sat_random_350_words.csv"
+    }
+    csv_filename = list_map.get(list_name.upper())
+    if not csv_filename:
+        return True
+    return load_vocab_list_from_csv(list_name.upper(), csv_filename)
 
 ensure_vocabulary_columns()
 
@@ -337,6 +389,58 @@ def login():
         
     finally:
         session.close()
+
+# ========== Discover / Pipeline API ==========
+
+@app.route('/api/discover', methods=['POST'])
+def discover_articles():
+    """根据兴趣主题抓取并推荐最新文章"""
+    data = request.json or {}
+    user_id = data.get('user_id')
+    categories = data.get('categories') or []
+    sources = data.get('sources')
+    count = data.get('count', 3)
+    language = data.get('language', 'English')
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    if not categories:
+        return jsonify({'error': 'categories is required'}), 400
+
+    session = Session()
+    try:
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        score = round(1 / len(categories), 3)
+        user.interests = {cat: score for cat in categories}
+        session.commit()
+    finally:
+        session.close()
+
+    try:
+        from data_pipeline import DataPipeline
+        pipeline = DataPipeline(
+            sources=sources,
+            enable_llm=True,
+            target_language=language,
+            db_url=DATABASE_URL
+        )
+        stats = asyncio.run(pipeline.run(categories=categories, articles_per_category=count))
+    except Exception as e:
+        return jsonify({'error': f'Pipeline failed: {e}'}), 500
+
+    init_recommender()
+
+    session = Session()
+    try:
+        recommendations = recommender.recommend_hybrid(session, user_id, 10)
+    finally:
+        session.close()
+
+    return jsonify({'stats': stats, 'recommendations': recommendations})
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
@@ -735,6 +839,9 @@ def get_vocabulary(user_id):
 def get_learning_word():
     """从标准词库中随机抽取单词并翻译"""
     list_name = request.args.get('list_name')
+    if list_name:
+        if not ensure_vocab_list_loaded(list_name):
+            return jsonify({'error': f'Vocabulary list file not found for {list_name}'}), 404
     word_row = fetch_random_vocab_word(list_name)
     if not word_row:
         return jsonify({'error': 'Vocabulary list not found'}), 404
