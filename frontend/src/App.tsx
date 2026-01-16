@@ -112,6 +112,32 @@ function App() {
     }
   };
 
+  const handleDiscover = async () => {
+    if (!user) return;
+    if (selectedTopics.length === 0) {
+      setDiscoverMessage('Please select at least one topic.');
+      return;
+    }
+    setIsDiscovering(true);
+    setDiscoverMessage('');
+    try {
+      const res = await api.discoverArticles({
+        user_id: user.id,
+        categories: selectedTopics,
+        sources: ['newsapi', 'voa', 'wikipedia'],
+        count: 3,
+        language: 'English'
+      });
+      setArticles(res.recommendations);
+      setDiscoverMessage(`Fetched ${res.stats.total_scraped} new articles.`);
+    } catch (err) {
+      console.error('Discover failed:', err);
+      setDiscoverMessage('Failed to fetch new articles. Please try again.');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
   const handleOpenArticle = async (article: Article) => {
     // 如果有 summary 但没有 content，或者 summary 是截断的 content
     const needsFetch = !article.content || (article.content.endsWith('...') && article.content.length < 500);
