@@ -66,7 +66,7 @@ class DataPipeline:
             try:
                 self.llm = LLMAnalyzer()
                 logger.info("LLM analyzer enabled")
-            except ValueError as e:
+            except Exception as e:
                 logger.warning(f"LLM disabled: {e}")
                 self.enable_llm = False
 
