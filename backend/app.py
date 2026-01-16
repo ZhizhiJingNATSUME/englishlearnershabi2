@@ -8,6 +8,7 @@ import re
 import sqlite3
 import random
 import asyncio
+import csv
 import requests
 from typing import Optional
 from datetime import datetime
@@ -179,6 +180,50 @@ def fetch_random_vocab_word(list_name: Optional[str]):
         return row
     finally:
         conn.close()
+
+def load_vocab_list_from_csv(list_name: str, csv_filename: str) -> bool:
+    """从 CSV 导入词库"""
+    csv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', csv_filename))
+    if not os.path.exists(csv_path):
+        return False
+    conn = sqlite3.connect(VOCAB_LIST_DB_PATH)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM standard_vocabulary WHERE list_name = ?", (list_name,))
+        existing_count = cursor.fetchone()[0]
+        if existing_count > 0:
+            return True
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.reader(f)
+            rows = []
+            for row in reader:
+                if not row:
+                    continue
+                word_text = row[0].strip()
+                definition = row[1].strip() if len(row) > 1 else None
+                if word_text:
+                    rows.append((list_name, word_text, definition))
+        if rows:
+            cursor.executemany(
+                "INSERT INTO standard_vocabulary (list_name, word, definition) VALUES (?, ?, ?)",
+                rows
+            )
+            conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def ensure_vocab_list_loaded(list_name: str) -> bool:
+    """确保词库列表已加载"""
+    list_map = {
+        "CET4": "4_random_350_words.csv",
+        "CET6": "6_random_350_words.csv",
+        "SAT": "sat_random_350_words.csv"
+    }
+    csv_filename = list_map.get(list_name.upper())
+    if not csv_filename:
+        return True
+    return load_vocab_list_from_csv(list_name.upper(), csv_filename)
 
 ensure_vocabulary_columns()
 
@@ -794,6 +839,9 @@ def get_vocabulary(user_id):
 def get_learning_word():
     """从标准词库中随机抽取单词并翻译"""
     list_name = request.args.get('list_name')
+    if list_name:
+        if not ensure_vocab_list_loaded(list_name):
+            return jsonify({'error': f'Vocabulary list file not found for {list_name}'}), 404
     word_row = fetch_random_vocab_word(list_name)
     if not word_row:
         return jsonify({'error': 'Vocabulary list not found'}), 404

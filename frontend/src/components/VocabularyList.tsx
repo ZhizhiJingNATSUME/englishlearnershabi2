@@ -9,6 +9,7 @@ interface VocabularyListProps {
     isLearningWordLoading: boolean;
     onRefreshLearningWord: () => void;
     onAddLearningWord: () => void;
+    learningWordError: string;
     selectedVocabList: string;
     onSelectVocabList: (listName: string) => void;
     quizQuestion: VocabularyQuizQuestion | null;
@@ -24,6 +25,7 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
     isLearningWordLoading,
     onRefreshLearningWord,
     onAddLearningWord,
+    learningWordError,
     selectedVocabList,
     onSelectVocabList,
     quizQuestion,
@@ -95,6 +97,11 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                         </button>
                     ))}
                 </div>
+                {learningWordError && (
+                    <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+                        {learningWordError}
+                    </p>
+                )}
                 <div className="mt-4 space-y-3">
                     <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                         {learningWord?.definition || 'Definition will appear here once loaded.'}

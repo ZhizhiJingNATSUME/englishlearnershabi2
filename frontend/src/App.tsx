@@ -21,6 +21,7 @@ function App() {
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
   const [learningWord, setLearningWord] = useState<LearningWord | null>(null);
   const [learningWordLoading, setLearningWordLoading] = useState(false);
+  const [learningWordError, setLearningWordError] = useState('');
   const [quizQuestion, setQuizQuestion] = useState<VocabularyQuizQuestion | null>(null);
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<'correct' | 'incorrect' | null>(null);
@@ -63,6 +64,7 @@ function App() {
           try {
             const word = await api.getLearningWord(selectedVocabList);
             setLearningWord(word);
+            setLearningWordError('');
             const quiz = await api.getVocabularyQuiz(user.id);
             setQuizQuestion(quiz);
             setQuizAnswer(null);
@@ -181,8 +183,11 @@ function App() {
     try {
       const word = await api.getLearningWord(selectedVocabList);
       setLearningWord(word);
+      setLearningWordError('');
     } catch (err) {
       console.error('Failed to load learning word:', err);
+      setLearningWord(null);
+      setLearningWordError('No words available for this list yet.');
     } finally {
       setLearningWordLoading(false);
     }
@@ -421,6 +426,7 @@ function App() {
                 isLearningWordLoading={learningWordLoading}
                 onRefreshLearningWord={refreshLearningWord}
                 onAddLearningWord={handleAddLearningWord}
+                learningWordError={learningWordError}
                 selectedVocabList={selectedVocabList}
                 onSelectVocabList={setSelectedVocabList}
                 quizQuestion={quizQuestion}
