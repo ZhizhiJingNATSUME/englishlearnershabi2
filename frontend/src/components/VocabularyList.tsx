@@ -1,7 +1,7 @@
 // src/components/VocabularyList.tsx
 import React from 'react';
 import { BookMarked, RefreshCcw, Search, Volume2 } from 'lucide-react';
-import type { LearningWord, VocabularyItem, VocabularyQuizQuestion } from '../types';
+import type { LearningWord, VocabularyItem } from '../types';
 
 interface VocabularyListProps {
     vocabulary: VocabularyItem[];
@@ -12,11 +12,6 @@ interface VocabularyListProps {
     learningWordError: string;
     selectedVocabList: string;
     onSelectVocabList: (listName: string) => void;
-    quizQuestion: VocabularyQuizQuestion | null;
-    quizAnswer: string | null;
-    quizFeedback: 'correct' | 'incorrect' | null;
-    onAnswerQuiz: (answer: string) => void;
-    onRefreshQuiz: () => void;
 }
 
 const VocabularyList: React.FC<VocabularyListProps> = ({
@@ -28,12 +23,9 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
     learningWordError,
     selectedVocabList,
     onSelectVocabList,
-    quizQuestion,
-    quizAnswer,
-    quizFeedback,
-    onAnswerQuiz,
-    onRefreshQuiz
 }) => {
+    const hasSelectedList = Boolean(selectedVocabList);
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -80,9 +72,9 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                     <div className="space-y-2">
                         <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Learn new vocabulary</p>
                         <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-                            {learningWord?.word || 'Loading...'}
+                            {hasSelectedList ? (learningWord?.word || 'Loading...') : 'Select a list to begin'}
                         </h2>
-                        {learningWord?.translation && (
+                        {hasSelectedList && learningWord?.translation && (
                             <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
                                 {learningWord.translation}
                             </p>
@@ -91,7 +83,7 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                     <div className="flex items-center gap-3">
                         <button
                             onClick={onRefreshLearningWord}
-                            disabled={isLearningWordLoading}
+                            disabled={isLearningWordLoading || !hasSelectedList}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-60"
                         >
                             <RefreshCcw size={16} className={isLearningWordLoading ? 'animate-spin' : ''} />
@@ -99,7 +91,7 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                         </button>
                         <button
                             onClick={onAddLearningWord}
-                            disabled={!learningWord?.word}
+                            disabled={!learningWord?.word || !hasSelectedList}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-60"
                         >
                             Add to word bank
@@ -111,74 +103,26 @@ const VocabularyList: React.FC<VocabularyListProps> = ({
                         {learningWordError}
                     </p>
                 )}
-                <div className="mt-4 space-y-3">
-                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {learningWord?.definition || 'Definition will appear here once loaded.'}
-                    </p>
-                    {learningWord?.example_sentence && (
-                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 text-sm text-slate-600 dark:text-slate-300">
-                            <p className="font-semibold text-slate-800 dark:text-slate-100">Example</p>
-                            <p className="mt-1 italic">{learningWord.example_sentence}</p>
-                            {learningWord.example_translation && (
-                                <p className="mt-2 text-emerald-600 dark:text-emerald-400">{learningWord.example_translation}</p>
-                            )}
-                        </div>
-                    )}
-                    {learningWord?.list_name && (
-                        <span className="inline-flex items-center px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">
-                            {learningWord.list_name} list
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                    <div className="space-y-2">
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Practice</p>
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Quick quiz</h2>
-                        <p className="text-sm text-slate-500">
-                            {quizQuestion?.question || 'Need more words to start a quiz.'}
+                {hasSelectedList && (
+                    <div className="mt-4 space-y-3">
+                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                            {learningWord?.definition || 'Definition will appear here once loaded.'}
                         </p>
+                        {learningWord?.example_sentence && (
+                            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 text-sm text-slate-600 dark:text-slate-300">
+                                <p className="font-semibold text-slate-800 dark:text-slate-100">Example</p>
+                                <p className="mt-1 italic">{learningWord.example_sentence}</p>
+                                {learningWord.example_translation && (
+                                    <p className="mt-2 text-emerald-600 dark:text-emerald-400">{learningWord.example_translation}</p>
+                                )}
+                            </div>
+                        )}
+                        {learningWord?.list_name && (
+                            <span className="inline-flex items-center px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                {learningWord.list_name} list
+                            </span>
+                        )}
                     </div>
-                    <button
-                        onClick={onRefreshQuiz}
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-                    >
-                        <RefreshCcw size={16} />
-                        New quiz
-                    </button>
-                </div>
-                {quizQuestion?.options && (
-                    <div className="mt-4 grid gap-2 md:grid-cols-2">
-                        {quizQuestion.options.map(option => {
-                            const isSelected = quizAnswer === option;
-                            const isCorrect = quizFeedback === 'correct' && option === quizQuestion.answer;
-                            const isIncorrect = quizFeedback === 'incorrect' && isSelected;
-                            return (
-                                <button
-                                    key={option}
-                                    onClick={() => onAnswerQuiz(option)}
-                                    className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                                        isCorrect
-                                            ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                            : isIncorrect
-                                                ? 'border-red-400 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300'
-                                                : isSelected
-                                                    ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-200 hover:border-blue-300'
-                                    }`}
-                                >
-                                    {option}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-                {quizFeedback && quizQuestion && (
-                    <p className={`mt-3 text-sm font-semibold ${quizFeedback === 'correct' ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {quizFeedback === 'correct' ? 'Correct! 🎉' : `Incorrect. Answer: ${quizQuestion.answer}`}
-                    </p>
                 )}
             </div>
 

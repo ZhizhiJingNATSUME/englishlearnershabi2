@@ -5,6 +5,7 @@ import SwipeDeck from './components/SwipeDeck';
 import ArticleCard from './components/ArticleCard';
 import Reader from './components/Reader';
 import VocabularyList from './components/VocabularyList';
+import VocabularyPractice from './components/VocabularyPractice';
 import ReadingTest from './components/ReadingTest';
 import WritingCoach from './components/WritingCoach';
 import SpeakingCoach from './components/SpeakingCoach';
@@ -30,7 +31,7 @@ function App() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState<string[]>(['technology', 'science']);
   const [discoverMessage, setDiscoverMessage] = useState('');
-  const [selectedVocabList, setSelectedVocabList] = useState('IELTS&TOEFL');
+  const [selectedVocabList, setSelectedVocabList] = useState('');
 
   // Reader state
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
@@ -62,16 +63,22 @@ function App() {
           setVocabulary(res.vocabulary);
           setLearningWordLoading(true);
           try {
+            if (!selectedVocabList) {
+              setLearningWord(null);
+              setLearningWordError('Select a vocabulary list to get started.');
+              return;
+            }
             const word = await api.getLearningWord(selectedVocabList);
             setLearningWord(word);
             setLearningWordError('');
-            const quiz = await api.getVocabularyQuiz(user.id);
-            setQuizQuestion(quiz);
-            setQuizAnswer(null);
-            setQuizFeedback(null);
           } finally {
             setLearningWordLoading(false);
           }
+        } else if (currentView === 'vocabulary_test') {
+          const quiz = await api.getVocabularyQuiz(user.id);
+          setQuizQuestion(quiz);
+          setQuizAnswer(null);
+          setQuizFeedback(null);
         } else if (currentView === 'stats') {
           const res = await api.getUserStats(user.id);
           console.log('📊 Stats API response:', res);
@@ -181,6 +188,11 @@ function App() {
     if (!user) return;
     setLearningWordLoading(true);
     try {
+      if (!selectedVocabList) {
+        setLearningWord(null);
+        setLearningWordError('Select a vocabulary list to get started.');
+        return;
+      }
       const word = await api.getLearningWord(selectedVocabList);
       setLearningWord(word);
       setLearningWordError('');
@@ -429,6 +441,13 @@ function App() {
                 learningWordError={learningWordError}
                 selectedVocabList={selectedVocabList}
                 onSelectVocabList={setSelectedVocabList}
+              />
+            </div>
+          )}
+
+          {currentView === 'vocabulary_test' && (
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
+              <VocabularyPractice
                 quizQuestion={quizQuestion}
                 quizAnswer={quizAnswer}
                 quizFeedback={quizFeedback}

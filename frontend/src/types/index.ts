@@ -197,4 +197,4 @@ export interface SpeakingSubmission {
     created_at: string;
 }
 
-export type ViewType = 'discover' | 'library' | 'history' | 'vocabulary' | 'stats' | 'test' | 'writing' | 'speaking';
+export type ViewType = 'discover' | 'library' | 'history' | 'vocabulary' | 'stats' | 'test' | 'writing' | 'speaking' | 'vocabulary_test';
