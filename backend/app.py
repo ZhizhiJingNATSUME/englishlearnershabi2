@@ -10,6 +10,7 @@ import random
 import asyncio
 import csv
 import requests
+from collections import Counter
 from typing import Optional
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -120,6 +121,26 @@ def fetch_dictionary_entry(word: str) -> dict:
     except (requests.RequestException, IndexError, KeyError, ValueError):
         return data
     return data
+
+def build_fallback_analysis(content: str) -> dict:
+    """在没有LLM结果时构建基础分析"""
+    words = re.findall(r"[A-Za-z']+", content.lower())
+    filtered = [w for w in words if len(w) > 4]
+    counts = Counter(filtered)
+    common = [word for word, _ in counts.most_common(12)]
+    vocabulary = [
+        {
+            "word": word,
+            "pronunciation": "",
+            "definition": "Keyword from the article"
+        }
+        for word in common
+    ]
+    return {
+        "vocabulary": vocabulary,
+        "collocations": [],
+        "sentence_patterns": []
+    }
 
 def build_example_sentence(word: str, part_of_speech: str) -> str:
     """生成更自然的示例句"""
@@ -603,7 +624,19 @@ def get_article_analysis(article_id):
         ).first()
 
         if not analysis:
-            return jsonify({'error': 'Article analysis not found'}), 404
+            article = session.query(Article).filter_by(id=article_id).first()
+            if not article or not article.content:
+                return jsonify({'error': 'Article analysis not found'}), 404
+
+            analysis_data = build_fallback_analysis(article.content)
+            analysis = ArticleAnalysis(
+                article_id=article_id,
+                target_language='English',
+                summary='',
+                analysis_data=analysis_data
+            )
+            session.add(analysis)
+            session.commit()
 
         highlights = []
         data = analysis.analysis_data
