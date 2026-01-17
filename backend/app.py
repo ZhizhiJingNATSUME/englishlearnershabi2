@@ -5,6 +5,13 @@ import os
 import json
 import tempfile
 import re
+import sqlite3
+import random
+import asyncio
+import csv
+import requests
+from collections import Counter
+from typing import Optional
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -22,10 +29,265 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-pro
 # 使用绝对路径或相对于当前目录的路径
 DB_PATH = os.path.join(os.path.dirname(__file__), 'english_learning.db')
 DATABASE_URL = os.getenv('DATABASE_URL', f'sqlite:///{DB_PATH}')
+VOCAB_LIST_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'english_learning.db'))
 
 # 初始化数据库
 engine = init_db(DATABASE_URL)
 Session = sessionmaker(bind=engine)
+
+def ensure_vocabulary_columns():
+    """确保生词表包含翻译字段"""
+    if not os.path.exists(DB_PATH):
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(vocabulary_items)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "translation" not in columns:
+            cursor.execute("ALTER TABLE vocabulary_items ADD COLUMN translation TEXT")
+        if "example_translation" not in columns:
+            cursor.execute("ALTER TABLE vocabulary_items ADD COLUMN example_translation TEXT")
+        conn.commit()
+    finally:
+        conn.close()
+
+def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN") -> str:
+    """使用免费翻译API翻译文本"""
+    if not text:
+        return ""
+    cleaned = text.strip()
+    if not cleaned:
+        return ""
+    translation = ""
+    try:
+        response = requests.get(
+            "https://api.mymemory.translated.net/get",
+            params={"q": cleaned, "langpair": f"{source_lang}|{target_lang}"},
+            timeout=10
+        )
+        if response.ok:
+            data = response.json()
+            translation = data.get("responseData", {}).get("translatedText", "") or ""
+    except requests.RequestException:
+        translation = ""
+    if translation and translation.strip().lower() != cleaned.lower():
+        return translation
+    try:
+        response = requests.post(
+            "https://libretranslate.de/translate",
+            json={
+                "q": cleaned,
+                "source": source_lang,
+                "target": target_lang,
+                "format": "text"
+            },
+            timeout=10
+        )
+        if response.ok:
+            data = response.json()
+            fallback = data.get("translatedText", "") or ""
+            if fallback and fallback.strip().lower() != cleaned.lower():
+                return fallback
+    except requests.RequestException:
+        return ""
+    return translation if translation.strip().lower() != cleaned.lower() else ""
+
+def fetch_dictionary_entry(word: str) -> dict:
+    """获取英文释义和例句"""
+    data = {"definition": "", "example_sentence": "", "part_of_speech": ""}
+    try:
+        response = requests.get(
+            f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}",
+            timeout=10
+        )
+        if not response.ok:
+            return data
+        payload = response.json()[0]
+        meanings = payload.get("meanings", [])
+        if not meanings:
+            return data
+        meaning = meanings[0]
+        for item in meanings:
+            if item.get("partOfSpeech") in ["noun", "verb"]:
+                meaning = item
+                break
+        definitions = meaning.get("definitions", [])
+        if definitions:
+            definition_entry = definitions[0]
+            data["definition"] = definition_entry.get("definition", "")
+            data["example_sentence"] = definition_entry.get("example", "")
+        data["part_of_speech"] = meaning.get("partOfSpeech", "")
+    except (requests.RequestException, IndexError, KeyError, ValueError):
+        return data
+    return data
+
+def build_fallback_analysis(content: str) -> dict:
+    """在没有LLM结果时构建基础分析"""
+    words = re.findall(r"[A-Za-z']+", content.lower())
+    filtered = [w for w in words if len(w) > 4]
+    counts = Counter(filtered)
+    common = [word for word, _ in counts.most_common(12)]
+    vocabulary = [
+        {
+            "word": word,
+            "pronunciation": "",
+            "definition": "Keyword from the article"
+        }
+        for word in common
+    ]
+    return {
+        "vocabulary": vocabulary,
+        "collocations": [],
+        "sentence_patterns": []
+    }
+
+def build_example_sentence(word: str, part_of_speech: str) -> str:
+    """生成更自然的示例句"""
+    templates = {
+        "noun": [
+            "The {word} plays an important role in daily life.",
+            "She wrote a report about the {word}.",
+            "We discussed the {word} during the meeting."
+        ],
+        "verb": [
+            "They decided to {word} before the deadline.",
+            "She will {word} the plan tomorrow.",
+            "Please {word} your answer carefully."
+        ],
+        "adjective": [
+            "It was a {word} decision to make.",
+            "The results were surprisingly {word}.",
+            "He felt {word} after the long trip."
+        ],
+        "adverb": [
+            "She spoke {word} during the presentation.",
+            "The team worked {word} to finish on time.",
+            "He responded {word} to the request."
+        ],
+        "default": [
+            "They used the word \"{word}\" in the discussion.",
+            "He is trying to remember the word \"{word}\".",
+            "The article included the term \"{word}\"."
+        ]
+    }
+    key = part_of_speech.lower() if part_of_speech else "default"
+    choices = templates.get(key, templates["default"])
+    return random.choice(choices).format(word=word)
+
+def fetch_random_vocab_word(list_name: Optional[str]):
+    """从词库中随机抽取单词"""
+    if not os.path.exists(VOCAB_LIST_DB_PATH):
+        return None
+    conn = sqlite3.connect(VOCAB_LIST_DB_PATH)
+    try:
+        cursor = conn.cursor()
+        if list_name:
+            if list_name.lower() == "ielts&toefl":
+                cursor.execute(
+                    "SELECT word, list_name FROM standard_vocabulary WHERE list_name IN (?, ?) ORDER BY RANDOM() LIMIT 1",
+                    ("IELTS", "TOEFL")
+                )
+            else:
+                cursor.execute(
+                    "SELECT word, list_name FROM standard_vocabulary WHERE list_name = ? ORDER BY RANDOM() LIMIT 1",
+                    (list_name,)
+                )
+        else:
+            cursor.execute(
+                "SELECT word, list_name FROM standard_vocabulary ORDER BY RANDOM() LIMIT 1"
+            )
+        row = cursor.fetchone()
+        return row
+    finally:
+        conn.close()
+
+def load_vocab_list_from_csv(list_name: str, csv_filename: str) -> bool:
+    """从 CSV 导入词库"""
+    csv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', csv_filename))
+    if not os.path.exists(csv_path):
+        return False
+    conn = sqlite3.connect(VOCAB_LIST_DB_PATH)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM standard_vocabulary WHERE list_name = ?", (list_name,))
+        existing_count = cursor.fetchone()[0]
+        if existing_count > 0:
+            return True
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.reader(f)
+            rows = []
+            for row in reader:
+                if not row:
+                    continue
+                word_text = row[0].strip()
+                definition = row[1].strip() if len(row) > 1 else None
+                if word_text:
+                    rows.append((list_name, word_text, definition))
+        if rows:
+            cursor.executemany(
+                "INSERT INTO standard_vocabulary (list_name, word, definition) VALUES (?, ?, ?)",
+                rows
+            )
+            conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def ensure_vocab_list_loaded(list_name: str) -> bool:
+    """确保词库列表已加载"""
+    list_map = {
+        "CET4": "4_random_350_words.csv",
+        "CET6": "6_random_350_words.csv",
+        "SAT": "sat_random_350_words.csv"
+    }
+    csv_filename = list_map.get(list_name.upper())
+    if not csv_filename:
+        return True
+    return load_vocab_list_from_csv(list_name.upper(), csv_filename)
+
+ensure_vocabulary_columns()
+
+def build_vocab_quiz(user_id: int):
+    """基于用户生词本生成简单测验"""
+    session = Session()
+    try:
+        items = session.query(VocabularyItem).filter_by(user_id=user_id).all()
+        if len(items) < 4:
+            return None
+        target = items[0]
+        if len(items) > 1:
+            target = items[int(datetime.utcnow().timestamp()) % len(items)]
+        target_translation = target.translation or translate_text(target.word)
+        if not target_translation:
+            return None
+        distractors = []
+        for item in items:
+            if item.id == target.id:
+                continue
+            if item.translation:
+                distractors.append(item.translation)
+            if len(distractors) >= 3:
+                break
+        while len(distractors) < 3:
+            distractor_word = fetch_random_vocab_word(None)
+            if not distractor_word:
+                break
+            distractor_translation = translate_text(distractor_word[0])
+            if distractor_translation and distractor_translation != target_translation:
+                distractors.append(distractor_translation)
+        if len(distractors) < 3:
+            return None
+        options = distractors[:3] + [target_translation]
+        random.shuffle(options)
+        return {
+            "word": target.word,
+            "question": f"What is the Chinese translation of \"{target.word}\"?",
+            "options": options,
+            "answer": target_translation
+        }
+    finally:
+        session.close()
 
 # 初始化推荐器
 recommender = ArticleRecommender()
@@ -148,6 +410,58 @@ def login():
         
     finally:
         session.close()
+
+# ========== Discover / Pipeline API ==========
+
+@app.route('/api/discover', methods=['POST'])
+def discover_articles():
+    """根据兴趣主题抓取并推荐最新文章"""
+    data = request.json or {}
+    user_id = data.get('user_id')
+    categories = data.get('categories') or []
+    sources = data.get('sources')
+    count = data.get('count', 3)
+    language = data.get('language', 'English')
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    if not categories:
+        return jsonify({'error': 'categories is required'}), 400
+
+    session = Session()
+    try:
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        score = round(1 / len(categories), 3)
+        user.interests = {cat: score for cat in categories}
+        session.commit()
+    finally:
+        session.close()
+
+    try:
+        from data_pipeline import DataPipeline
+        pipeline = DataPipeline(
+            sources=sources,
+            enable_llm=True,
+            target_language=language,
+            db_url=DATABASE_URL
+        )
+        stats = asyncio.run(pipeline.run(categories=categories, articles_per_category=count))
+    except Exception as e:
+        return jsonify({'error': f'Pipeline failed: {e}'}), 500
+
+    init_recommender()
+
+    session = Session()
+    try:
+        recommendations = recommender.recommend_hybrid(session, user_id, 10)
+    finally:
+        session.close()
+
+    return jsonify({'stats': stats, 'recommendations': recommendations})
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
@@ -310,7 +624,19 @@ def get_article_analysis(article_id):
         ).first()
 
         if not analysis:
-            return jsonify({'error': 'Article analysis not found'}), 404
+            article = session.query(Article).filter_by(id=article_id).first()
+            if not article or not article.content:
+                return jsonify({'error': 'Article analysis not found'}), 404
+
+            analysis_data = build_fallback_analysis(article.content)
+            analysis = ArticleAnalysis(
+                article_id=article_id,
+                target_language='English',
+                summary='',
+                analysis_data=analysis_data
+            )
+            session.add(analysis)
+            session.commit()
 
         highlights = []
         data = analysis.analysis_data
@@ -477,6 +803,8 @@ def add_vocabulary():
     
     user_id = data.get('user_id')
     word = data.get('word')
+    translation = data.get('translation', '')
+    example_translation = data.get('example_translation', '')
     
     if not user_id or not word:
         return jsonify({'error': 'user_id and word are required'}), 400
@@ -497,7 +825,9 @@ def add_vocabulary():
             word=word.lower(),
             definition=data.get('definition', ''),
             example_sentence=data.get('example_sentence', ''),
-            source_article_id=data.get('source_article_id')
+            translation=translation,
+            example_translation=example_translation,
+            source_article_id=data.get('source_article_id') or data.get('article_id')
         )
         
         session.add(vocab)
@@ -526,6 +856,8 @@ def get_vocabulary(user_id):
                 'word': item.word,
                 'definition': item.definition,
                 'example_sentence': item.example_sentence,
+                'translation': item.translation,
+                'example_translation': item.example_translation,
                 'mastery_level': item.mastery_level,
                 'times_reviewed': item.times_reviewed,
                 'created_at': item.created_at.isoformat()
@@ -535,6 +867,41 @@ def get_vocabulary(user_id):
         
     finally:
         session.close()
+
+@app.route('/api/vocabulary/learn', methods=['GET'])
+def get_learning_word():
+    """从标准词库中随机抽取单词并翻译"""
+    list_name = request.args.get('list_name')
+    if list_name:
+        if not ensure_vocab_list_loaded(list_name):
+            return jsonify({'error': f'Vocabulary list file not found for {list_name}'}), 404
+    word_row = fetch_random_vocab_word(list_name)
+    if not word_row:
+        return jsonify({'error': 'Vocabulary list not found'}), 404
+    word, actual_list = word_row
+    dictionary_data = fetch_dictionary_entry(word)
+    example_sentence = dictionary_data.get("example_sentence") or build_example_sentence(
+        word,
+        dictionary_data.get("part_of_speech", "")
+    )
+    translation = translate_text(word)
+    example_translation = translate_text(example_sentence)
+    return jsonify({
+        "word": word,
+        "list_name": actual_list,
+        "definition": dictionary_data.get("definition", ""),
+        "example_sentence": example_sentence,
+        "translation": translation,
+        "example_translation": example_translation
+    })
+
+@app.route('/api/vocabulary/quiz/<int:user_id>', methods=['GET'])
+def get_vocabulary_quiz(user_id):
+    """获取生词测验"""
+    quiz = build_vocab_quiz(user_id)
+    if not quiz:
+        return jsonify({'error': 'Not enough vocabulary data for quiz'}), 400
+    return jsonify(quiz)
 
 # ========== 阅读测试相关API ==========
 
@@ -1350,4 +1717,3 @@ if __name__ == '__main__':
     
     # 启动服务
     app.run(debug=True, host='0.0.0.0', port=5000)
-
