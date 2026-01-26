@@ -63,7 +63,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
       setEvaluation(null);
       setTranscription('');
     } catch (err) {
-      setError('无法访问麦克风，请检查浏览器权限');
+      setError('Unable to access microphone. Please check browser permissions.');
       console.error('Microphone error:', err);
     }
   };
@@ -94,7 +94,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
       });
       
       if (!response.ok) {
-        throw new Error('评分失败');
+        throw new Error('Scoring failed');
       }
       
       const data = await response.json();
@@ -106,10 +106,10 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
         setActiveView('result');
         fetchHistory();
       } else {
-        setError('录音太短或无法识别，请重新录制');
+        setError('Recording too short or could not be recognized. Please try again.');
       }
     } catch (err) {
-      setError('评分服务连接失败，请确保后端已启动');
+      setError('Could not reach the scoring service. Please ensure the backend is running.');
       console.error('Evaluation error:', err);
     } finally {
       setIsProcessing(false);
@@ -150,7 +150,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
           <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
             AI Speaking Coach
           </h1>
-          <p className="text-slate-500 mt-2">雅思口语 AI 私教 - 语音识别 & 即时评分</p>
+          <p className="text-slate-500 mt-2">IELTS Speaking AI Coach - speech recognition & instant scoring</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -162,7 +162,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
             }`}
           >
             <Mic className="inline mr-2" size={18} />
-            练习
+            Practice
           </button>
           <button
             onClick={() => setActiveView('history')}
@@ -173,7 +173,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
             }`}
           >
             <History className="inline mr-2" size={18} />
-            历史记录
+            History
           </button>
         </div>
       </div>
@@ -203,14 +203,14 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
 
             <div>
               <h3 className="text-xl font-bold dark:text-white mb-2">
-                {isRecording ? '正在录音中...' : audioBlob ? '录音完成' : '准备开始'}
+                {isRecording ? 'Recording...' : audioBlob ? 'Recording ready' : 'Ready to start'}
               </h3>
               <p className="text-slate-500">
                 {isRecording 
-                  ? '点击停止按钮结束录音' 
+                  ? 'Click stop to finish recording' 
                   : audioBlob 
-                  ? '点击提交评分或重新录制' 
-                  : '点击开始按钮进行录音'
+                  ? 'Submit for scoring or record again' 
+                  : 'Click start to record'
                 }
               </p>
             </div>
@@ -222,7 +222,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
                   className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2"
                 >
                   <Mic size={20} />
-                  开始录音
+                  Start recording
                 </button>
               )}
 
@@ -232,7 +232,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
                   className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2"
                 >
                   <Square size={20} />
-                  停止录音
+                  Stop recording
                 </button>
               )}
 
@@ -242,7 +242,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
                     onClick={reset}
                     className="px-6 py-4 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-all"
                   >
-                    重新录制
+                    Record again
                   </button>
                   <button
                     onClick={submitForEvaluation}
@@ -252,12 +252,12 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
                     {isProcessing ? (
                       <>
                         <Loader2 size={20} className="animate-spin" />
-                        AI 评分中...
+                        AI scoring...
                       </>
                     ) : (
                       <>
                         <TrendingUp size={20} />
-                        提交评分
+                        Submit for scoring
                       </>
                     )}
                   </button>
@@ -275,12 +275,12 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
             onClick={reset}
             className="text-purple-600 hover:underline font-semibold"
           >
-            ← 重新录音
+            ← Record again
           </button>
 
           {/* 总分 */}
           <div className="bg-gradient-to-br from-purple-600 to-pink-700 rounded-2xl p-8 text-white shadow-xl">
-            <div className="text-sm font-semibold mb-2 opacity-90">雅思预估分数</div>
+            <div className="text-sm font-semibold mb-2 opacity-90">Estimated IELTS score</div>
             <div className="text-6xl font-black mb-4">{evaluation.overall_band}</div>
             <div className="text-sm opacity-75">IELTS Speaking Band Score</div>
           </div>
@@ -289,7 +289,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2 mb-4">
               <Volume2 size={20} className="text-purple-600" />
-              <h3 className="font-bold text-lg dark:text-white">语音识别结果</h3>
+              <h3 className="font-bold text-lg dark:text-white">Transcription</h3>
             </div>
             <p className="text-slate-700 dark:text-slate-300 italic">"{transcription}"</p>
           </div>
@@ -298,28 +298,28 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
             <h3 className="font-bold text-lg mb-4 dark:text-white flex items-center gap-2">
               <CheckCircle size={20} className="text-purple-600" />
-              评分细则
+              Scoring criteria
             </h3>
             <div className="space-y-4">
-              {renderScoreBar(evaluation.feedback.fluency.score, '流利度与连贯性')}
-              {renderScoreBar(evaluation.feedback.vocabulary.score, '词汇资源')}
-              {renderScoreBar(evaluation.feedback.grammar.score, '语法准确性')}
+              {renderScoreBar(evaluation.feedback.fluency.score, 'Fluency & coherence')}
+              {renderScoreBar(evaluation.feedback.vocabulary.score, 'Lexical resource')}
+              {renderScoreBar(evaluation.feedback.grammar.score, 'Grammar accuracy')}
             </div>
             <div className="mt-4 space-y-2">
               <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <div className="text-xs font-bold text-slate-500 mb-1">流利度点评</div>
+                <div className="text-xs font-bold text-slate-500 mb-1">Fluency feedback</div>
                 <div className="text-sm text-slate-600 dark:text-slate-400">
                   {evaluation.feedback.fluency.comment}
                 </div>
               </div>
               <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <div className="text-xs font-bold text-slate-500 mb-1">词汇点评</div>
+                <div className="text-xs font-bold text-slate-500 mb-1">Vocabulary feedback</div>
                 <div className="text-sm text-slate-600 dark:text-slate-400">
                   {evaluation.feedback.vocabulary.comment}
                 </div>
               </div>
               <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <div className="text-xs font-bold text-slate-500 mb-1">语法点评</div>
+                <div className="text-xs font-bold text-slate-500 mb-1">Grammar feedback</div>
                 <div className="text-sm text-slate-600 dark:text-slate-400">
                   {evaluation.feedback.grammar.comment}
                 </div>
@@ -331,7 +331,7 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl p-6 border border-amber-200 dark:border-amber-800">
             <h3 className="font-bold text-lg mb-4 dark:text-white flex items-center gap-2">
               <Sparkles size={20} className="text-amber-600" />
-              地道表达建议
+              Natural phrasing suggestions
             </h3>
             <p className="text-slate-700 dark:text-slate-300">
               {evaluation.native_suggestion}
@@ -343,10 +343,10 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
       {/* 历史记录 */}
       {activeView === 'history' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
-          <h3 className="font-bold text-lg mb-4 dark:text-white">口语练习历史</h3>
+          <h3 className="font-bold text-lg mb-4 dark:text-white">Speaking history</h3>
           {history.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
-              还没有练习记录，开始你的第一次练习吧！
+              No practice history yet. Start your first session!
             </div>
           ) : (
             <div className="space-y-3">
@@ -361,17 +361,17 @@ export default function SpeakingCoach({ userId }: SpeakingCoachProps) {
                         {item.transcription}
                       </div>
                       <div className="flex gap-4 text-xs text-slate-500">
-                        <span>流利度: {item.fluency_score}</span>
-                        <span>词汇: {item.vocabulary_score}</span>
-                        <span>语法: {item.grammar_score}</span>
+                        <span>Fluency: {item.fluency_score}</span>
+                        <span>Vocabulary: {item.vocabulary_score}</span>
+                        <span>Grammar: {item.grammar_score}</span>
                       </div>
                       <div className="text-xs text-slate-400 mt-2">
-                        {new Date(item.created_at).toLocaleString('zh-CN')}
+                        {new Date(item.created_at).toLocaleString('en-US')}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-bold text-purple-600">{item.overall_band}</div>
-                      <div className="text-xs text-slate-500">总分</div>
+                      <div className="text-xs text-slate-500">Overall</div>
                     </div>
                   </div>
                 </div>
