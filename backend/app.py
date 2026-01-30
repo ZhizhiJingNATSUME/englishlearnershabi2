@@ -3,6 +3,7 @@ Flask API服务
 """
 import os
 import json
+import hashlib
 import tempfile
 import re
 from urllib.parse import quote
