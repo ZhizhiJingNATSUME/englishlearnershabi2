@@ -115,8 +115,9 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN
 
 def build_image_prompt(article: Article) -> str:
     """构建用于生成文章配图的提示词"""
-    title = (article.title or "").strip()
-    parts = [title, article.category or ""]
+    summary = (article.content or "").strip().replace("\n", " ")
+    summary = " ".join(summary.split()[:40])
+    parts = [article.title, article.category or "", summary]
     prompt = " ".join([p for p in parts if p]).strip()
     if not prompt:
         prompt = "English learning article illustration"
@@ -153,14 +154,12 @@ def generate_qwen_image(prompt: str) -> bytes:
         return b""
     return b""
 
-def get_image_filename(article: Article, prompt: str) -> str:
-    digest = hashlib.sha1(prompt.encode("utf-8")).hexdigest()[:10]
-    return f"article_{article.id}_{digest}.png"
+def get_image_filename(article: Article) -> str:
+    return f"article_{article.id}.png"
 
 def ensure_article_image(session, article: Article) -> str:
     """确保文章有配图 URL"""
-    prompt = build_image_prompt(article)
-    filename = get_image_filename(article, prompt)
+    filename = get_image_filename(article)
     file_path = os.path.join(IMAGE_DIR, filename)
     image_url = f"{API_PUBLIC_BASE}/api/article_images/{filename}"
 
@@ -170,9 +169,7 @@ def ensure_article_image(session, article: Article) -> str:
             session.commit()
         return image_url
 
-    if article.image_url == image_url:
-        return image_url
-
+    prompt = build_image_prompt(article)
     image_bytes = generate_qwen_image(prompt)
     if image_bytes:
         with open(file_path, "wb") as image_file:
@@ -252,10 +249,10 @@ def qwen_translate_text(text: str, target_lang: str) -> str:
         return ""
     return ""
 
-def translate_article_text(text: str, target_lang: str) -> list[str]:
+def translate_article_text(text: str, target_lang: str) -> str:
     """翻译文章文本为指定语言，按段落返回"""
     if not text:
-        return []
+        return ""
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
     translated_paragraphs = []
     for paragraph in paragraphs:
@@ -269,15 +266,7 @@ def translate_article_text(text: str, target_lang: str) -> list[str]:
                 translated_chunks.append(translated.strip())
         if translated_chunks:
             translated_paragraphs.append(" ".join(translated_chunks))
-    return translated_paragraphs
-
-def build_translation_pairs(original_text: str, translations: list[str]) -> list[dict]:
-    original_paragraphs = [p.strip() for p in re.split(r'\n\s*\n', original_text) if p.strip()]
-    pairs = []
-    for idx, original in enumerate(original_paragraphs):
-        translated = translations[idx] if idx < len(translations) else ""
-        pairs.append({"original": original, "translation": translated})
-    return pairs
+    return "\n\n".join(translated_paragraphs)
 
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
@@ -832,18 +821,6 @@ def get_article_translation(article_id):
             target_language=target_lang
         ).first()
         if translation:
-            try:
-                cached = json.loads(translation.translation_text)
-                if isinstance(cached, list):
-                    article = session.query(Article).filter_by(id=article_id).first()
-                    pairs = build_translation_pairs(article.content if article else "", cached)
-                    return jsonify({
-                        'article_id': article_id,
-                        'target_language': target_lang,
-                        'paragraphs': pairs
-                    })
-            except json.JSONDecodeError:
-                pass
             return jsonify({
                 'article_id': article_id,
                 'target_language': target_lang,
@@ -854,23 +831,22 @@ def get_article_translation(article_id):
         if not article:
             return jsonify({'error': 'Article not found'}), 404
 
-        translated_paragraphs = translate_article_text(article.content, target_lang)
-        if not translated_paragraphs:
+        translated_text = translate_article_text(article.content, target_lang)
+        if not translated_text:
             return jsonify({'error': 'Translation failed'}), 500
 
         translation = ArticleTranslation(
             article_id=article_id,
             target_language=target_lang,
-            translation_text=json.dumps(translated_paragraphs, ensure_ascii=False)
+            translation_text=translated_text
         )
         session.add(translation)
         session.commit()
-        pairs = build_translation_pairs(article.content, translated_paragraphs)
 
         return jsonify({
             'article_id': article_id,
             'target_language': target_lang,
-            'paragraphs': pairs
+            'translation': translated_text
         })
     finally:
         session.close()
