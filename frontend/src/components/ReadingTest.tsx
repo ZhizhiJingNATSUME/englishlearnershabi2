@@ -19,7 +19,6 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState<'select' | 'test' | 'result'>('select');
 
-    // 加载文章列表
     useEffect(() => {
         loadArticles();
     }, [level]);
@@ -36,7 +35,6 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
         }
     };
 
-    // 开始测试
     const startTest = async (article: Article) => {
         setLoading(true);
         setSelectedArticle(article);
@@ -47,11 +45,11 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                 num_questions: 5
             });
             
-            // 如果是完型填空，保存挖空后的文章
+            // If the test is cloze, keep the blanked-out article content.
             if (res.article && res.article.content) {
                 setSelectedArticle({
                     ...article,
-                    content: res.article.content  // 挖空后的文章
+                    content: res.article.content
                 });
             }
             
@@ -60,16 +58,15 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
             setStep('test');
         } catch (err) {
             console.error('Failed to generate test:', err);
-            alert('生成题目失败，请重试');
+            alert('Failed to generate questions. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    // 提交答案
     const submitAnswers = async () => {
         if (Object.keys(answers).length < questions.length) {
-            if (!confirm('还有题目未作答，确定提交吗？')) {
+            if (!confirm('Some questions are unanswered. Submit anyway?')) {
                 return;
             }
         }
@@ -92,13 +89,12 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
             setStep('result');
         } catch (err) {
             console.error('Failed to submit test:', err);
-            alert('提交失败，请重试');
+            alert('Submission failed. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    // 重新开始
     const resetTest = () => {
         setSelectedArticle(null);
         setQuestions([]);
@@ -116,24 +112,23 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
         );
     }
 
-    // 选择文章界面
     if (step === 'select') {
         return (
             <div className="max-w-5xl mx-auto p-6 space-y-8">
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 text-white shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                         <BookOpen className="text-white" size={28} />
-                        <h2 className="text-3xl font-bold">阅读测试</h2>
+                        <h2 className="text-3xl font-bold">Reading Test</h2>
                     </div>
                     <p className="text-blue-100">
-                        选择难度与题型，系统将从文章库中生成个性化阅读测试。
+                        Choose a level and question type, and we'll generate a personalized reading test from the article library.
                     </p>
                 </div>
 
                 <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6 shadow-sm">
                         <div>
-                            <h3 className="text-lg font-semibold dark:text-white mb-2">选择难度等级</h3>
+                            <h3 className="text-lg font-semibold dark:text-white mb-2">Choose a level</h3>
                             <div className="flex flex-wrap gap-2">
                                 {['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map(l => (
                                     <button
@@ -152,7 +147,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                         </div>
 
                         <div>
-                            <h3 className="text-lg font-semibold dark:text-white mb-2">测试类型</h3>
+                            <h3 className="text-lg font-semibold dark:text-white mb-2">Test type</h3>
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     onClick={() => setTestType('cloze')}
@@ -162,7 +157,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
                                     }`}
                                 >
-                                    完形填空
+                                    Cloze
                                 </button>
                                 <button
                                     onClick={() => setTestType('true_false')}
@@ -172,31 +167,31 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
                                     }`}
                                 >
-                                    判断题
+                                    True/False
                                 </button>
                             </div>
                         </div>
                     </div>
 
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold dark:text-white mb-2">题目说明</h3>
+                        <h3 className="text-lg font-semibold dark:text-white mb-2">How it works</h3>
                         <ul className="text-sm text-slate-500 space-y-2">
-                            <li>• 完形填空：阅读文章后选择正确单词补全。</li>
-                            <li>• 判断题：根据文章判断陈述正误。</li>
-                            <li>• 每次测试 5 题，答题后即刻评分。</li>
+                            <li>• Cloze: read the passage and choose the correct word to fill each blank.</li>
+                            <li>• True/False: decide whether each statement is correct based on the passage.</li>
+                            <li>• Each test includes 5 questions with instant scoring.</li>
                         </ul>
                     </div>
                 </div>
 
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-semibold dark:text-white">可用文章</h3>
+                        <h3 className="text-xl font-semibold dark:text-white">Available articles</h3>
                         <span className="text-sm text-slate-500">
-                            当前难度：{level} · {articles.length} 篇
+                            Current level: {level} · {articles.length} articles
                         </span>
                     </div>
                     {articles.length === 0 && (
-                        <p className="text-slate-500">暂无 {level} 级别的文章，请先运行数据导入</p>
+                        <p className="text-slate-500">No {level} articles available yet. Please run the data import first.</p>
                     )}
                     <div className="grid gap-4">
                         {articles.map((article: Article) => (
@@ -211,7 +206,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                                         <div className="flex flex-wrap gap-2 text-sm text-slate-500">
                                             <span className="inline-flex items-center gap-1">
                                                 <BookOpen size={14} />
-                                                {article.word_count} 词
+                                                {article.word_count} words
                                             </span>
                                             <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
                                                 {article.difficulty_level}
@@ -220,7 +215,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                                         </div>
                                     </div>
                                     <button className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow-md shadow-blue-500/30">
-                                        开始测试
+                                        Start test
                                     </button>
                                 </div>
                             </div>
@@ -231,7 +226,6 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
         );
     }
 
-    // 测试界面
     if (step === 'test') {
         return (
             <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -240,14 +234,14 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                         <div>
                             <h2 className="text-2xl font-bold dark:text-white">{selectedArticle?.title}</h2>
                             <p className="text-slate-500">
-                                {testType === 'cloze' ? '完形填空' : '判断题'} · {questions.length} 题
+                                {testType === 'cloze' ? 'Cloze' : 'True/False'} · {questions.length} questions
                             </p>
                         </div>
                         <button
                             onClick={resetTest}
                             className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                         >
-                            返回选择
+                            Back to selection
                         </button>
                     </div>
                 </div>
@@ -255,32 +249,30 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                 {loading ? (
                     <div className="flex items-center justify-center h-64">
                         <Loader2 className="animate-spin" size={32} />
-                        <span className="ml-2">正在生成题目...</span>
+                        <span className="ml-2">Generating questions...</span>
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        {/* 完形填空：先显示挖空后的文章 */}
                         {testType === 'cloze' && (
                             <div className="border border-blue-100 dark:border-blue-900/40 rounded-2xl p-6 bg-blue-50 dark:bg-blue-900/20">
                                 <div className="flex items-center gap-2 mb-4">
                                     <BookOpen className="text-blue-600" size={20} />
-                                    <h3 className="font-bold text-lg dark:text-white">阅读文章并填空</h3>
+                                    <h3 className="font-bold text-lg dark:text-white">Read the passage and fill the blanks</h3>
                                 </div>
                                 <div className="text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
                                     {selectedArticle?.content}
                                 </div>
                                 <p className="text-sm text-slate-500 mt-4">
-                                    💡 提示：仔细阅读文章，然后为每个空格选择正确的单词
+                                    💡 Tip: read carefully and choose the correct word for each blank.
                                 </p>
                             </div>
                         )}
 
-                        {/* 判断题：先显示完整文章 */}
                         {testType === 'true_false' && (
                             <div className="border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-6 bg-emerald-50 dark:bg-emerald-900/20">
                                 <div className="flex items-center gap-2 mb-4">
                                     <BookOpen className="text-green-600" size={20} />
-                                    <h3 className="font-bold text-lg dark:text-white">阅读文章</h3>
+                                    <h3 className="font-bold text-lg dark:text-white">Read the passage</h3>
                                 </div>
                                 <div className="text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
                                     {selectedArticle?.content}
@@ -288,17 +280,16 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                             </div>
                         )}
 
-                        {/* 题目列表 */}
                         <div className="border-t border-slate-200 dark:border-slate-800 pt-6">
                             <h3 className="font-bold text-lg mb-4 dark:text-white">
-                                {testType === 'cloze' ? '请为每个空格选择正确答案' : '判断以下陈述的正误'}
+                                {testType === 'cloze' ? 'Choose the correct answer for each blank' : 'Judge whether each statement is true or false'}
                             </h3>
                         </div>
 
                         {questions.map((q, idx) => (
                             <div key={q.id} className="border border-slate-200 dark:border-slate-800 rounded-2xl p-6 bg-white dark:bg-slate-900 shadow-sm">
                                 <h3 className="font-semibold mb-4 dark:text-white">
-                                    {testType === 'cloze' ? `空格 ${q.blank_index || idx + 1}` : `${idx + 1}. ${q.question_text}`}
+                                    {testType === 'cloze' ? `Blank ${q.blank_index || idx + 1}` : `${idx + 1}. ${q.question_text}`}
                                 </h3>
 
                                 {testType === 'cloze' && q.options ? (
@@ -354,14 +345,14 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                                 onClick={resetTest}
                                 className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
-                                取消
+                                Cancel
                             </button>
                             <button
                                 onClick={submitAnswers}
                                 disabled={loading}
                                 className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-50 shadow-md shadow-blue-500/30"
                             >
-                                {loading ? '提交中...' : '提交答案'}
+                                {loading ? 'Submitting...' : 'Submit answers'}
                             </button>
                         </div>
                     </div>
@@ -370,7 +361,6 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
         );
     }
 
-    // 结果界面
     if (step === 'result' && result) {
         const percentage = result.percentage;
         const passed = percentage >= 60;
@@ -391,7 +381,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                         {percentage.toFixed(1)}%
                     </h2>
                     <p className="text-slate-500">
-                        正确 {result.score} / {result.total} 题
+                        Correct: {result.score} / {result.total}
                     </p>
                 </div>
 
@@ -411,15 +401,15 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                                 )}
                                 <div className="flex-1">
                                     <p className="font-medium mb-2">
-                                        第 {idx + 1} 题: {questions[idx]?.question_text}
+                                        Question {idx + 1}: {questions[idx]?.question_text}
                                     </p>
                                     {!r.is_correct && (
                                         <>
                                             <p className="text-sm text-red-700">
-                                                你的答案: {r.user_answer || '(未作答)'}
+                                                Your answer: {r.user_answer || '(Not answered)'}
                                             </p>
                                             <p className="text-sm text-green-700">
-                                                正确答案: {r.correct_answer}
+                                                Correct answer: {r.correct_answer}
                                             </p>
                                         </>
                                     )}
@@ -436,7 +426,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({ userId }: ReadingTestProps) =
                     onClick={resetTest}
                     className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-md shadow-blue-500/30"
                 >
-                    再做一次
+                    Try again
                 </button>
             </div>
         );
