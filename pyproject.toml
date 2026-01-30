@@ -1,0 +1,51 @@
+[project]
+name = "faga-adaptive-english-teacher"
+version = "0.2.0"
+description = "AI-powered personalized English reading learning application with NewsAPI, VOA, and Wikipedia content sources"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Web Framework
+    "flask>=3.1.2",
+    "flask-cors>=6.0.2",
+    
+    # Database
+    "sqlalchemy>=2.0.45",
+    
+    # Data Sources
+    "newsapi-python>=0.2.7",
+    "feedparser>=6.0.12",
+    "wikipedia>=1.4.0",
+    
+    # Web Scraping
+    "newspaper4k>=0.9.4.1",
+    "beautifulsoup4>=4.14.3",
+    "lxml>=6.0.2",
+    "requests>=2.32.5",
+    
+    # NLP & Text Analysis
+    "nltk>=3.9.2",
+    "textstat>=0.7.12",
+    
+    # AI/LLM
+    "google-generativeai>=0.8.6",
+    "pydantic>=2.12.5",
+    
+    # Recommendation System
+    "faiss-cpu>=1.13.2",
+    "numpy>=2.4.0",
+    
+    # Utilities
+    "python-dotenv>=1.2.1",
+    "python-dateutil>=2.9.0.post0",
+    "pyjwt>=2.10.1",
+    "tqdm>=4.67.1",
+]
+
+[project.scripts]
+run-pipeline = "scripts.run_pipeline:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]

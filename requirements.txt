@@ -1,0 +1,38 @@
+# Core Framework
+flask==3.0.0
+flask-cors==4.0.0
+
+# Database
+sqlalchemy==2.0.23
+
+# File Upload
+python-multipart==0.0.6
+
+# AI & Speech Recognition
+openai-whisper==20231117
+openai==1.12.0
+huggingface-hub>=1.0.0
+
+# NLP & ML
+sentence-transformers==2.2.2
+nltk==3.8.1
+spacy==3.7.2
+textstat==0.7.3
+
+# Vector Storage
+faiss-cpu==1.7.4
+numpy==1.24.3
+
+# Web Scraping
+requests==2.31.0
+beautifulsoup4==4.12.2
+wikipedia==1.4.0
+
+# Utilities
+python-dotenv==1.0.0
+tqdm==4.66.1
+pyjwt==2.8.0
+
+# Audio Processing (required by Whisper)
+ffmpeg-python==0.2.0
+
