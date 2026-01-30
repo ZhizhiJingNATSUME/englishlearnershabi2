@@ -93,6 +93,16 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN
         return ""
     return translation if translation.strip().lower() != cleaned.lower() else ""
 
+def contains_cjk(text: str) -> bool:
+    if not text:
+        return False
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+def sanitize_translation(text: str, fallback: str = "") -> str:
+    if not text:
+        return fallback
+    return fallback if contains_cjk(text) else text
+
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
     data = {"definition": "", "example_sentence": "", "part_of_speech": ""}
@@ -121,6 +131,12 @@ def fetch_dictionary_entry(word: str) -> dict:
     except (requests.RequestException, IndexError, KeyError, ValueError):
         return data
     return data
+
+def get_word_definition(word: str, fallback: str = "") -> str:
+    if fallback:
+        return fallback
+    dictionary_data = fetch_dictionary_entry(word)
+    return dictionary_data.get("definition", "")
 
 def build_fallback_analysis(content: str) -> dict:
     """在没有LLM结果时构建基础分析"""
@@ -258,33 +274,34 @@ def build_vocab_quiz(user_id: int):
         target = items[0]
         if len(items) > 1:
             target = items[int(datetime.utcnow().timestamp()) % len(items)]
-        target_translation = target.translation or translate_text(target.word)
-        if not target_translation:
+        target_definition = get_word_definition(target.word, target.definition)
+        if not target_definition:
             return None
         distractors = []
         for item in items:
             if item.id == target.id:
                 continue
-            if item.translation:
-                distractors.append(item.translation)
+            definition = get_word_definition(item.word, item.definition)
+            if definition and definition != target_definition and definition not in distractors:
+                distractors.append(definition)
             if len(distractors) >= 3:
                 break
         while len(distractors) < 3:
             distractor_word = fetch_random_vocab_word(None)
             if not distractor_word:
                 break
-            distractor_translation = translate_text(distractor_word[0])
-            if distractor_translation and distractor_translation != target_translation:
-                distractors.append(distractor_translation)
+            distractor_definition = get_word_definition(distractor_word[0])
+            if distractor_definition and distractor_definition != target_definition and distractor_definition not in distractors:
+                distractors.append(distractor_definition)
         if len(distractors) < 3:
             return None
-        options = distractors[:3] + [target_translation]
+        options = distractors[:3] + [target_definition]
         random.shuffle(options)
         return {
             "word": target.word,
-            "question": f"What is the Chinese translation of \"{target.word}\"?",
+            "question": f"Which definition best matches \"{target.word}\"?",
             "options": options,
-            "answer": target_translation
+            "answer": target_definition
         }
     finally:
         session.close()
@@ -912,8 +929,9 @@ def add_vocabulary():
     
     user_id = data.get('user_id')
     word = data.get('word')
-    translation = data.get('translation', '')
-    example_translation = data.get('example_translation', '')
+    definition = data.get('definition', '')
+    translation = sanitize_translation(data.get('translation', ''), definition)
+    example_translation = sanitize_translation(data.get('example_translation', ''), '')
     
     if not user_id or not word:
         return jsonify({'error': 'user_id and word are required'}), 400
@@ -932,7 +950,7 @@ def add_vocabulary():
         vocab = VocabularyItem(
             user_id=user_id,
             word=word.lower(),
-            definition=data.get('definition', ''),
+            definition=definition,
             example_sentence=data.get('example_sentence', ''),
             translation=translation,
             example_translation=example_translation,
@@ -960,13 +978,15 @@ def get_vocabulary(user_id):
         
         result = []
         for item in vocab_items:
+            translation = sanitize_translation(item.translation or "", item.definition or "")
+            example_translation = sanitize_translation(item.example_translation or "", "")
             result.append({
                 'id': item.id,
                 'word': item.word,
                 'definition': item.definition,
                 'example_sentence': item.example_sentence,
-                'translation': item.translation,
-                'example_translation': item.example_translation,
+                'translation': translation,
+                'example_translation': example_translation,
                 'mastery_level': item.mastery_level,
                 'times_reviewed': item.times_reviewed,
                 'created_at': item.created_at.isoformat()
@@ -993,8 +1013,8 @@ def get_learning_word():
         word,
         dictionary_data.get("part_of_speech", "")
     )
-    translation = translate_text(word)
-    example_translation = translate_text(example_sentence)
+    translation = dictionary_data.get("definition", "")
+    example_translation = ""
     return jsonify({
         "word": word,
         "list_name": actual_list,
