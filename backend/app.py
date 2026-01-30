@@ -14,7 +14,7 @@ import requests
 from collections import Counter
 from typing import Optional
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from sqlalchemy.orm import sessionmaker
 
@@ -35,6 +35,9 @@ VOCAB_LIST_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..
 # 初始化数据库
 engine = init_db(DATABASE_URL)
 Session = sessionmaker(bind=engine)
+IMAGE_DIR = os.path.join(os.path.dirname(__file__), 'generated_images')
+os.makedirs(IMAGE_DIR, exist_ok=True)
+API_PUBLIC_BASE = os.getenv('API_PUBLIC_BASE', 'http://localhost:5000')
 
 def ensure_vocabulary_columns():
     """确保生词表包含翻译字段"""
@@ -117,7 +120,7 @@ def build_image_prompt(article: Article) -> str:
     prompt = " ".join([p for p in parts if p]).strip()
     if not prompt:
         prompt = "English learning article illustration"
-    return f"{prompt}, editorial illustration, high quality, vivid colors"
+    return f"{prompt}, editorial illustration, high quality, vivid colors, clean composition"
 
 def generate_image_url(article: Article) -> str:
     """生成文章配图 URL（基于内容提示词）"""
@@ -126,14 +129,58 @@ def generate_image_url(article: Article) -> str:
     seed = article.id or random.randint(1000, 9999)
     return f"https://image.pollinations.ai/prompt/{encoded}?width=1200&height=720&seed={seed}&nologo=true"
 
+def generate_qwen_image(prompt: str) -> bytes:
+    """使用 Qwen 图像模型生成图片数据"""
+    hf_token = os.getenv("HF_TOKEN", "")
+    if not hf_token:
+        return b""
+    model_name = os.getenv("HF_IMAGE_MODEL", "Qwen/Qwen-Image")
+    try:
+        response = requests.post(
+            f"https://api-inference.huggingface.co/models/{model_name}",
+            headers={
+                "Authorization": f"Bearer {hf_token}",
+                "Accept": "image/png"
+            },
+            json={"inputs": prompt},
+            timeout=60
+        )
+        if not response.ok:
+            return b""
+        if response.headers.get("content-type", "").startswith("image/"):
+            return response.content
+    except requests.RequestException:
+        return b""
+    return b""
+
+def get_image_filename(article: Article) -> str:
+    return f"article_{article.id}.png"
+
 def ensure_article_image(session, article: Article) -> str:
     """确保文章有配图 URL"""
-    if article.image_url:
-        return article.image_url
-    image_url = generate_image_url(article)
-    article.image_url = image_url
+    filename = get_image_filename(article)
+    file_path = os.path.join(IMAGE_DIR, filename)
+    image_url = f"{API_PUBLIC_BASE}/api/article_images/{filename}"
+
+    if os.path.exists(file_path):
+        if article.image_url != image_url:
+            article.image_url = image_url
+            session.commit()
+        return image_url
+
+    prompt = build_image_prompt(article)
+    image_bytes = generate_qwen_image(prompt)
+    if image_bytes:
+        with open(file_path, "wb") as image_file:
+            image_file.write(image_bytes)
+        article.image_url = image_url
+        session.commit()
+        return image_url
+
+    fallback_url = generate_image_url(article)
+    article.image_url = fallback_url
     session.commit()
-    return image_url
+    return fallback_url
 
 def decorate_articles_with_images(session: Session, articles: list[dict]) -> list[dict]:
     """为文章列表补充配图 URL"""
@@ -146,7 +193,7 @@ def decorate_articles_with_images(session: Session, articles: list[dict]) -> lis
         item['imageUrl'] = ensure_article_image(session, article)
     return articles
 
-def split_into_chunks(text: str, max_chars: int = 800) -> list[str]:
+def split_into_chunks(text: str, max_chars: int = 400) -> list[str]:
     """拆分长文本避免单次翻译过长"""
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     chunks = []
@@ -164,24 +211,39 @@ def split_into_chunks(text: str, max_chars: int = 800) -> list[str]:
         chunks.append(current.strip())
     return chunks or [text.strip()]
 
-def hf_translate_text(text: str, target_lang: str) -> str:
-    """使用 Hugging Face API 翻译文本"""
+def qwen_translate_text(text: str, target_lang: str) -> str:
+    """使用 Qwen 模型翻译文本"""
     hf_token = os.getenv("HF_TOKEN", "")
     if not hf_token:
         return ""
-    model_name = os.getenv("HF_TRANSLATION_MODEL", "Helsinki-NLP/opus-mt-en-zh")
+    model_name = os.getenv("HF_TRANSLATION_MODEL", "Qwen/Qwen2.5-3B-Instruct")
+    prompt = (
+        f"Translate the following English text to {target_lang}. "
+        "Return only the translation.\n\n"
+        f"Text:\n{text}\n\nTranslation:"
+    )
     try:
         response = requests.post(
             f"https://api-inference.huggingface.co/models/{model_name}",
             headers={"Authorization": f"Bearer {hf_token}"},
-            json={"inputs": text},
-            timeout=30
+            json={
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 512,
+                    "temperature": 0.2,
+                    "return_full_text": False
+                }
+            },
+            timeout=60
         )
         if not response.ok:
             return ""
         payload = response.json()
         if isinstance(payload, list) and payload:
-            return payload[0].get("translation_text", "") or ""
+            generated = payload[0].get("generated_text", "") or ""
+            if "Translation:" in generated:
+                return generated.split("Translation:", 1)[-1].strip()
+            return generated.strip()
     except requests.RequestException:
         return ""
     return ""
@@ -196,7 +258,7 @@ def translate_article_text(text: str, target_lang: str) -> str:
         chunks = split_into_chunks(paragraph)
         translated_chunks = []
         for chunk in chunks:
-            translated = hf_translate_text(chunk, target_lang)
+            translated = qwen_translate_text(chunk, target_lang)
             if not translated:
                 translated = translate_text(chunk, target_lang=target_lang)
             if translated:
@@ -741,6 +803,11 @@ def get_article(article_id):
         
     finally:
         session.close()
+
+@app.route('/api/article_images/<path:filename>', methods=['GET'])
+def get_article_image(filename):
+    """返回生成的文章配图"""
+    return send_from_directory(IMAGE_DIR, filename)
 
 @app.route('/api/articles/<int:article_id>/translation', methods=['GET'])
 def get_article_translation(article_id):
