@@ -1,6 +1,6 @@
 import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5001/api';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 
 const handleResponse = async (response: Response) => {
     if (!response.ok) {
@@ -45,6 +45,10 @@ export const getArticle = async (id: number): Promise<Article> => {
 
 export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> => {
     return handleResponse(await fetch(`${API_BASE}/articles/${id}/analysis`));
+};
+
+export const getArticleTranslation = async (id: number, targetLang: string = 'zh-CN'): Promise<{ article_id: number; target_language: string; translation: string }> => {
+    return handleResponse(await fetch(`${API_BASE}/articles/${id}/translation?target_lang=${encodeURIComponent(targetLang)}`));
 };
 
 export const getRecommendations = async (userId: number, limit = 10): Promise<{ recommendations: Article[] }> => {

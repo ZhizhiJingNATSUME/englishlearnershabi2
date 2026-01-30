@@ -74,6 +74,9 @@ class Article(Base):
     
     # VOA 特定
     audio_url = Column(String(500), nullable=True)  # 预留音频
+
+    # AI/Generated image
+    image_url = Column(String(500), nullable=True)
     
     # 时间戳
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -111,6 +114,22 @@ class ArticleAnalysis(Base):
     
     # 关系
     article = relationship("Article", back_populates="analyses")
+
+class ArticleTranslation(Base):
+    """文章翻译"""
+    __tablename__ = 'article_translations'
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, ForeignKey('articles.id', ondelete='CASCADE'), nullable=False)
+    target_language = Column(String(50), default='zh-CN')
+    translation_text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('article_id', 'target_language', name='uix_article_translation_lang'),
+    )
+
+    article = relationship("Article", backref="translations")
 
 class ReadingHistory(Base):
     """阅读历史"""
