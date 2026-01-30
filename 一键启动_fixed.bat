@@ -1,56 +1,46 @@
 @echo off
-setlocal EnableExtensions
+chcp 65001 > nul
+title English Learner - One Click Start
 
-REM Use only ASCII text to avoid Windows codepage/encoding problems.
+echo ==========================================
+echo   English Learner - Starting...
+echo ==========================================
+echo.
+echo Please wait about 10 seconds.
+echo Do not close this window.
+echo.
 
-cd /d "%~dp0" || (echo ERROR: Could not switch to script folder. & pause & exit /b 1)
+REM Get project root directory
+set "PROJECT_DIR=%~dp0"
 
-REM Check prerequisites
-where python >nul 2>nul || (
-  echo ERROR: Python was not found in PATH.
-  echo Install Python and make sure "Add Python to PATH" is enabled.
-  pause
-  exit /b 1
-)
+REM -------- Start Backend --------
+echo [1/2] Starting backend...
+cd /d "%PROJECT_DIR%backend"
 
-where npm >nul 2>nul || (
-  echo ERROR: Node.js/npm was not found in PATH.
-  echo Install Node.js (npm comes with it).
-  pause
-  exit /b 1
-)
+call venv\Scripts\activate.bat
 
-REM Check folders
-if not exist "%~dp0frontend\" (
-  echo ERROR: Folder "frontend" not found next to this .bat file.
-  echo Current folder: "%~dp0"
-  echo If your frontend folder has a different name, update the script accordingly.
-  pause
-  exit /b 1
-)
+start "Backend Server" cmd /k ^
+"echo Backend is running... && python app.py"
 
-REM Optional: install frontend deps if missing
-if exist "%~dp0frontend\package.json" (
-  if not exist "%~dp0frontend\node_modules\" (
-    echo Frontend dependencies not found. Running "npm install"...
-    pushd "%~dp0frontend" || (echo ERROR: Could not enter frontend folder. & pause & exit /b 1)
-    npm install
-    popd
-  )
-)
+echo Backend started at http://127.0.0.1:5000
+echo.
 
-echo Starting backend (Flask :5000)...
-start "Backend (Flask :5000)" cmd /k "cd /d \"%~dp0\" && python start_backend.py"
+timeout /t 6 > nul
 
-echo Waiting 3 seconds...
-timeout /t 3 >nul
+REM -------- Start Frontend --------
+echo [2/2] Starting frontend...
+cd /d "%PROJECT_DIR%frontend"
 
-echo Starting frontend (Vite :5173)...
-start "Frontend (Vite :5173)" cmd /k "cd /d \"%~dp0frontend\" && npm run dev"
+start "Frontend Server" cmd /k ^
+"echo Frontend is running... && npm run dev"
 
 echo.
-echo Services started.
-echo Frontend: http://localhost:5173
-echo Backend:  http://localhost:5000
+echo ==========================================
+echo Startup finished.
 echo.
+echo Open browser and visit:
+echo http://localhost:3000
+echo ==========================================
+echo.
+
 pause

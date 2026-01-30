@@ -44,7 +44,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
 
   const handleSubmit = async () => {
     if (userText.trim().length < 20) {
-      alert('Please write at least 20 characters.');
+      alert('请至少写20个字符');
       return;
     }
 
@@ -67,7 +67,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
       fetchHistory();
     } catch (err) {
       console.error('Evaluation failed:', err);
-      alert('Scoring failed. Please try again.');
+      alert('评分失败，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +99,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
           <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
             AI Writing Coach
           </h1>
-          <p className="text-slate-500 mt-2">IELTS Writing AI Coach - instant scoring & polishing</p>
+          <p className="text-slate-500 mt-2">雅思写作 AI 私教 - 即时评分 & 润色</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -110,7 +110,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
             }`}
           >
-            Write
+            写作
           </button>
           <button
             onClick={() => setActiveView('history')}
@@ -120,7 +120,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
             }`}
           >
-            History
+            历史
           </button>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2 mb-4">
                 <BookOpen size={20} className="text-blue-600" />
-                <h3 className="font-bold text-lg dark:text-white">Choose a topic</h3>
+                <h3 className="font-bold text-lg dark:text-white">选择话题</h3>
               </div>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 <button
@@ -144,8 +144,8 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
                       : 'bg-slate-50 dark:bg-slate-800 border border-transparent hover:border-slate-300'
                   }`}
                 >
-                  <div className="font-semibold text-sm dark:text-white">Free writing</div>
-                  <div className="text-xs text-slate-500 mt-1">No topic</div>
+                  <div className="font-semibold text-sm dark:text-white">自由写作</div>
+                  <div className="text-xs text-slate-500 mt-1">不限话题</div>
                 </button>
                 {topics.map((topic) => (
                   <button
@@ -189,16 +189,16 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <PenTool size={20} className="text-blue-600" />
-                  <h3 className="font-bold text-lg dark:text-white">Your essay</h3>
+                  <h3 className="font-bold text-lg dark:text-white">你的作文</h3>
                 </div>
                 <div className="text-sm text-slate-500">
-                  {userText.split(/\s+/).filter(w => w).length} words
+                  {userText.split(/\s+/).filter(w => w).length} 词
                 </div>
               </div>
               <textarea
                 value={userText}
                 onChange={(e) => setUserText(e.target.value)}
-                placeholder="Start writing... (150 words recommended)"
+                placeholder="开始写作... (建议至少150词)"
                 className="w-full h-64 p-4 bg-slate-50 dark:bg-slate-800 border-none rounded-xl resize-none focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
               />
               <button
@@ -209,12 +209,12 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
                 {isLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                    AI scoring in progress...
+                    AI 正在评分中...
                   </>
                 ) : (
                   <>
                     <Send size={20} />
-                    Submit for scoring
+                    提交评分
                   </>
                 )}
               </button>
@@ -234,18 +234,18 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
             }}
             className="text-blue-600 hover:underline font-semibold"
           >
-            ← Back to writing
+            ← 返回写作
           </button>
 
           {/* 总分卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-xl">
-              <div className="text-sm font-semibold mb-2 opacity-90">Estimated IELTS score</div>
+              <div className="text-sm font-semibold mb-2 opacity-90">雅思预估分数</div>
               <div className="text-6xl font-black mb-4">{evaluation.ielts.overall}</div>
               <div className="text-sm opacity-75">IELTS Band Score</div>
             </div>
             <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-8 text-white shadow-xl">
-              <div className="text-sm font-semibold mb-2 opacity-90">General writing score</div>
+              <div className="text-sm font-semibold mb-2 opacity-90">通用写作评分</div>
               <div className="text-6xl font-black mb-4">{evaluation.general.overall}</div>
               <div className="text-sm opacity-75">General Score</div>
             </div>
@@ -256,16 +256,16 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
               <h3 className="font-bold text-lg mb-4 dark:text-white flex items-center gap-2">
                 <TrendingUp size={20} className="text-blue-600" />
-                IELTS criteria
+                雅思评分细则
               </h3>
               <div className="space-y-4">
-                {renderScoreBar(evaluation.ielts.criteria.task_response.score, 'Task response')}
-                {renderScoreBar(evaluation.ielts.criteria.coherence.score, 'Coherence')}
-                {renderScoreBar(evaluation.ielts.criteria.lexical.score, 'Lexical resource')}
-                {renderScoreBar(evaluation.ielts.criteria.grammar.score, 'Grammar accuracy')}
+                {renderScoreBar(evaluation.ielts.criteria.task_response.score, '任务完成度')}
+                {renderScoreBar(evaluation.ielts.criteria.coherence.score, '连贯性')}
+                {renderScoreBar(evaluation.ielts.criteria.lexical.score, '词汇丰富度')}
+                {renderScoreBar(evaluation.ielts.criteria.grammar.score, '语法准确性')}
               </div>
               <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                <div className="text-xs font-bold text-slate-500 mb-2">Comments</div>
+                <div className="text-xs font-bold text-slate-500 mb-2">点评</div>
                 {Object.entries(evaluation.ielts.criteria).map(([key, val]) => (
                   <div key={key} className="text-sm text-slate-600 dark:text-slate-400 mb-2">
                     {val.comment}
@@ -277,19 +277,19 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
               <h3 className="font-bold text-lg mb-4 dark:text-white flex items-center gap-2">
                 <CheckCircle size={20} className="text-purple-600" />
-                General criteria
+                通用评分细则
               </h3>
               <div className="space-y-4">
-                {renderScoreBar(evaluation.general.criteria.native_phrasing.score, 'Natural phrasing')}
-                {renderScoreBar(evaluation.general.criteria.grammar_accuracy.score, 'Grammar accuracy')}
-                {renderScoreBar(evaluation.general.criteria.spelling.score, 'Spelling')}
+                {renderScoreBar(evaluation.general.criteria.native_phrasing.score, '地道程度')}
+                {renderScoreBar(evaluation.general.criteria.grammar_accuracy.score, '语法准确')}
+                {renderScoreBar(evaluation.general.criteria.spelling.score, '拼写')}
               </div>
             </div>
           </div>
 
           {/* 总体反馈 */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
-            <h3 className="font-bold text-lg mb-4 dark:text-white">💬 Overall feedback</h3>
+            <h3 className="font-bold text-lg mb-4 dark:text-white">💬 总体反馈</h3>
             <p className="text-slate-700 dark:text-slate-300">{evaluation.overall_feedback}</p>
           </div>
 
@@ -297,7 +297,7 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl p-6 border border-amber-200 dark:border-amber-800">
             <h3 className="font-bold text-lg mb-4 dark:text-white flex items-center gap-2">
               <Sparkles size={20} className="text-amber-600" />
-              AI polished version
+              AI 润色版本
             </h3>
             <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
               {evaluation.improved_version}
@@ -309,10 +309,10 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
       {/* 历史记录 */}
       {activeView === 'history' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800">
-          <h3 className="font-bold text-lg mb-4 dark:text-white">Writing history</h3>
+          <h3 className="font-bold text-lg mb-4 dark:text-white">写作历史</h3>
           {history.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
-              No writing history yet. Start your first essay!
+              还没有写作记录，开始你的第一篇吧！
             </div>
           ) : (
             <div className="space-y-3">
@@ -324,11 +324,11 @@ export default function WritingCoach({ userId }: WritingCoachProps) {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="text-sm font-semibold dark:text-white">
-                        {item.topic || 'Free writing'}
+                        {item.topic || '自由写作'}
                       </div>
                       <div className="text-sm text-slate-500 mt-1">{item.preview}</div>
                       <div className="text-xs text-slate-400 mt-2">
-                        {new Date(item.created_at).toLocaleString('en-US')}
+                        {new Date(item.created_at).toLocaleString('zh-CN')}
                       </div>
                     </div>
                     <div className="text-right">
