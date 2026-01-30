@@ -1,15 +1,17 @@
 // src/components/Reader.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     X,
     Settings,
     BookOpen,
     GraduationCap,
     Plus,
-    Check
+    Check,
+    Languages
 } from 'lucide-react';
 import type { Article, ArticleAnalysis, HighlightItem } from '../types';
 import ReactMarkdown from 'react-markdown';
+import * as api from '../services/api';
 
 interface ReaderProps {
     article: Article;
@@ -24,11 +26,45 @@ interface ReaderProps {
 }
 
 const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocabulary }) => {
-    const [mode, setMode] = useState<'clean' | 'learning'>('clean');
+    const [mode, setMode] = useState<'clean' | 'learning' | 'translation'>('clean');
     const [selectedHighlight, setSelectedHighlight] = useState<HighlightItem | null>(null);
     const [addedWords, setAddedWords] = useState<Set<string>>(new Set());
     const [addingWord, setAddingWord] = useState(false);
+    const [translation, setTranslation] = useState('');
+    const [translationPairs, setTranslationPairs] = useState<{ original: string; translation: string }[]>([]);
+    const [translationLoading, setTranslationLoading] = useState(false);
+    const [translationError, setTranslationError] = useState('');
     const fontSize = 18; // Fixed font size for now
+
+    useEffect(() => {
+        setTranslation('');
+        setTranslationPairs([]);
+        setTranslationError('');
+    }, [article.id]);
+
+    useEffect(() => {
+        if (mode !== 'translation' || translation || translationLoading) {
+            return;
+        }
+        const loadTranslation = async () => {
+            setTranslationLoading(true);
+            setTranslationError('');
+            try {
+                const res = await api.getArticleTranslation(article.id);
+                if (res.paragraphs && res.paragraphs.length > 0) {
+                    setTranslationPairs(res.paragraphs);
+                } else {
+                    setTranslation(res.translation || '');
+                }
+            } catch (err) {
+                console.error('Failed to load translation:', err);
+                setTranslationError('Translation is unavailable right now.');
+            } finally {
+                setTranslationLoading(false);
+            }
+        };
+        loadTranslation();
+    }, [article.id, mode, translation, translationLoading]);
 
     // Helper to escape regex special characters and normalize whitespace
     const getRegexPattern = (text: string, isWord: boolean) => {
@@ -39,7 +75,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
 
     // Highlighting Logic
     const segments = useMemo(() => {
-        if (!analysis || mode === 'clean' || !article.content) {
+        if (!analysis || mode !== 'learning' || !article.content) {
             return [{ text: article.content || "", highlight: null, type: 0 }];
         }
 
@@ -197,6 +233,17 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             <GraduationCap size={16} />
                             <span>Learning</span>
                         </button>
+                        <button
+                            onClick={() => {
+                                setMode('translation');
+                                setSelectedHighlight(null);
+                            }}
+                            className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${mode === 'translation' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                                }`}
+                        >
+                            <Languages size={16} />
+                            <span>Translation</span>
+                        </button>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -208,6 +255,15 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
 
                 <div className="flex-1 overflow-y-auto px-6 py-12 md:px-24 lg:px-48 scroll-smooth">
                     <div className="max-w-3xl mx-auto">
+                        {article.imageUrl && (
+                            <div className="mb-8 overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                                <img
+                                    src={article.imageUrl}
+                                    alt={article.title}
+                                    className="w-full h-64 md:h-80 object-cover"
+                                />
+                            </div>
+                        )}
                         <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-2 leading-tight">
                             {article.title}
                         </h1>
@@ -228,10 +284,10 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             className="prose prose-slate dark:prose-invert max-w-none leading-relaxed"
                             style={{ fontSize: `${fontSize}px` }}
                         >
-                            {mode === 'clean' ? (
+                            {mode === 'clean' && (
                                 <ReactMarkdown>{article.content || ''}</ReactMarkdown>
-                            ) : (
-                                // For learning mode, we still use the segments, but we wrap in pre-wrap to preserve existing newlines
+                            )}
+                            {mode === 'learning' && (
                                 <div className="whitespace-pre-wrap">
                                     {segments.map((segment, idx) => (
                                         <span
@@ -242,6 +298,40 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                             {segment.text}
                                         </span>
                                     ))}
+                                </div>
+                            )}
+                            {mode === 'translation' && (
+                                <div className="space-y-4 text-slate-700 dark:text-slate-200">
+                                    {translationLoading && (
+                                        <p className="text-sm text-slate-500">Translating article...</p>
+                                    )}
+                                    {!translationLoading && translationError && (
+                                        <p className="text-sm text-red-500">{translationError}</p>
+                                    )}
+                                    {!translationLoading && !translationError && translationPairs.length > 0 && (
+                                        <div className="space-y-6">
+                                            {translationPairs.map((pair, idx) => (
+                                                <div key={idx} className="grid gap-4 md:grid-cols-2">
+                                                    <p className="leading-relaxed text-slate-700 dark:text-slate-200">
+                                                        {pair.original}
+                                                    </p>
+                                                    <p className="leading-relaxed text-emerald-700 dark:text-emerald-300">
+                                                        {pair.translation}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {!translationLoading && !translationError && translationPairs.length === 0 && translation && (
+                                        translation.split('\n\n').map((paragraph, idx) => (
+                                            <p key={idx} className="leading-relaxed">
+                                                {paragraph}
+                                            </p>
+                                        ))
+                                    )}
+                                    {!translationLoading && !translationError && !translation && (
+                                        <p className="text-sm text-slate-500">No translation available yet.</p>
+                                    )}
                                 </div>
                             )}
                         </div>
