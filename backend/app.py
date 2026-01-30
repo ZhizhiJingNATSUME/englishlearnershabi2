@@ -5,6 +5,7 @@ import os
 import json
 import tempfile
 import re
+from urllib.parse import quote
 import sqlite3
 import random
 import asyncio
@@ -17,7 +18,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sqlalchemy.orm import sessionmaker
 
-from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, WritingHistory, SpeakingHistory
+from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, ArticleTranslation, WritingHistory, SpeakingHistory
 from recommender import ArticleRecommender
 from question_generator import QuestionGenerator
 
@@ -48,6 +49,21 @@ def ensure_vocabulary_columns():
             cursor.execute("ALTER TABLE vocabulary_items ADD COLUMN translation TEXT")
         if "example_translation" not in columns:
             cursor.execute("ALTER TABLE vocabulary_items ADD COLUMN example_translation TEXT")
+        conn.commit()
+    finally:
+        conn.close()
+
+def ensure_article_columns():
+    """确保文章表包含图像字段"""
+    if not os.path.exists(DB_PATH):
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(articles)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "image_url" not in columns:
+            cursor.execute("ALTER TABLE articles ADD COLUMN image_url TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -92,6 +108,102 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN
     except requests.RequestException:
         return ""
     return translation if translation.strip().lower() != cleaned.lower() else ""
+
+def build_image_prompt(article: Article) -> str:
+    """构建用于生成文章配图的提示词"""
+    summary = (article.content or "").strip().replace("\n", " ")
+    summary = " ".join(summary.split()[:40])
+    parts = [article.title, article.category or "", summary]
+    prompt = " ".join([p for p in parts if p]).strip()
+    if not prompt:
+        prompt = "English learning article illustration"
+    return f"{prompt}, editorial illustration, high quality, vivid colors"
+
+def generate_image_url(article: Article) -> str:
+    """生成文章配图 URL（基于内容提示词）"""
+    prompt = build_image_prompt(article)
+    encoded = quote(prompt)
+    seed = article.id or random.randint(1000, 9999)
+    return f"https://image.pollinations.ai/prompt/{encoded}?width=1200&height=720&seed={seed}&nologo=true"
+
+def ensure_article_image(session, article: Article) -> str:
+    """确保文章有配图 URL"""
+    if article.image_url:
+        return article.image_url
+    image_url = generate_image_url(article)
+    article.image_url = image_url
+    session.commit()
+    return image_url
+
+def decorate_articles_with_images(session: Session, articles: list[dict]) -> list[dict]:
+    """为文章列表补充配图 URL"""
+    for item in articles:
+        if item.get('imageUrl'):
+            continue
+        article = session.query(Article).filter_by(id=item.get('id')).first()
+        if not article:
+            continue
+        item['imageUrl'] = ensure_article_image(session, article)
+    return articles
+
+def split_into_chunks(text: str, max_chars: int = 800) -> list[str]:
+    """拆分长文本避免单次翻译过长"""
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    chunks = []
+    current = ""
+    for sentence in sentences:
+        if not sentence:
+            continue
+        if len(current) + len(sentence) + 1 > max_chars:
+            if current:
+                chunks.append(current.strip())
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip()
+    if current:
+        chunks.append(current.strip())
+    return chunks or [text.strip()]
+
+def hf_translate_text(text: str, target_lang: str) -> str:
+    """使用 Hugging Face API 翻译文本"""
+    hf_token = os.getenv("HF_TOKEN", "")
+    if not hf_token:
+        return ""
+    model_name = os.getenv("HF_TRANSLATION_MODEL", "Helsinki-NLP/opus-mt-en-zh")
+    try:
+        response = requests.post(
+            f"https://api-inference.huggingface.co/models/{model_name}",
+            headers={"Authorization": f"Bearer {hf_token}"},
+            json={"inputs": text},
+            timeout=30
+        )
+        if not response.ok:
+            return ""
+        payload = response.json()
+        if isinstance(payload, list) and payload:
+            return payload[0].get("translation_text", "") or ""
+    except requests.RequestException:
+        return ""
+    return ""
+
+def translate_article_text(text: str, target_lang: str) -> str:
+    """翻译文章文本为指定语言，按段落返回"""
+    if not text:
+        return ""
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    translated_paragraphs = []
+    for paragraph in paragraphs:
+        chunks = split_into_chunks(paragraph)
+        translated_chunks = []
+        for chunk in chunks:
+            translated = hf_translate_text(chunk, target_lang)
+            if not translated:
+                translated = translate_text(chunk, target_lang=target_lang)
+            if translated:
+                translated_chunks.append(translated.strip())
+        if translated_chunks:
+            translated_paragraphs.append(" ".join(translated_chunks))
+    return "\n\n".join(translated_paragraphs)
 
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
@@ -247,6 +359,7 @@ def ensure_vocab_list_loaded(list_name: str) -> bool:
     return load_vocab_list_from_csv(list_name.upper(), csv_filename)
 
 ensure_vocabulary_columns()
+ensure_article_columns()
 
 def build_vocab_quiz(user_id: int):
     """基于用户生词本生成简单测验"""
@@ -461,6 +574,7 @@ def discover_articles():
     session = Session()
     try:
         recommendations = recommender.recommend_hybrid(session, user_id, 10)
+        recommendations = decorate_articles_with_images(session, recommendations)
     finally:
         session.close()
 
@@ -574,6 +688,7 @@ def get_articles():
         
         result = []
         for article in articles:
+            image_url = ensure_article_image(session, article)
             result.append({
                 'id': article.id,
                 'title': article.title,
@@ -583,7 +698,8 @@ def get_articles():
                 'source_name': article.source_name,
                 'difficulty_level': article.difficulty_level,
                 'word_count': article.word_count,
-                'views': article.views
+                'views': article.views,
+                'imageUrl': image_url
             })
         
         return jsonify({'articles': result})
@@ -604,6 +720,8 @@ def get_article(article_id):
         article.views += 1
         session.commit()
         
+        image_url = ensure_article_image(session, article)
+
         return jsonify({
             'id': article.id,
             'title': article.title,
@@ -617,9 +735,51 @@ def get_article(article_id):
             'word_count': article.word_count,
             'sentence_count': article.sentence_count,
             'key_words': article.key_words,
-            'views': article.views
+            'views': article.views,
+            'imageUrl': image_url
         })
         
+    finally:
+        session.close()
+
+@app.route('/api/articles/<int:article_id>/translation', methods=['GET'])
+def get_article_translation(article_id):
+    """获取文章翻译"""
+    target_lang = request.args.get('target_lang', default='zh-CN')
+    session = Session()
+    try:
+        translation = session.query(ArticleTranslation).filter_by(
+            article_id=article_id,
+            target_language=target_lang
+        ).first()
+        if translation:
+            return jsonify({
+                'article_id': article_id,
+                'target_language': target_lang,
+                'translation': translation.translation_text
+            })
+
+        article = session.query(Article).filter_by(id=article_id).first()
+        if not article:
+            return jsonify({'error': 'Article not found'}), 404
+
+        translated_text = translate_article_text(article.content, target_lang)
+        if not translated_text:
+            return jsonify({'error': 'Translation failed'}), 500
+
+        translation = ArticleTranslation(
+            article_id=article_id,
+            target_language=target_lang,
+            translation_text=translated_text
+        )
+        session.add(translation)
+        session.commit()
+
+        return jsonify({
+            'article_id': article_id,
+            'target_language': target_lang,
+            'translation': translated_text
+        })
     finally:
         session.close()
 
@@ -700,6 +860,7 @@ def recommend():
     session = Session()
     try:
         recommendations = recommender.recommend_hybrid(session, user_id, limit)
+        recommendations = decorate_articles_with_images(session, recommendations)
         return jsonify({'recommendations': recommendations})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -47,6 +47,10 @@ export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> =
     return handleResponse(await fetch(`${API_BASE}/articles/${id}/analysis`));
 };
 
+export const getArticleTranslation = async (id: number, targetLang: string = 'zh-CN'): Promise<{ article_id: number; target_language: string; translation: string }> => {
+    return handleResponse(await fetch(`${API_BASE}/articles/${id}/translation?target_lang=${encodeURIComponent(targetLang)}`));
+};
+
 export const getRecommendations = async (userId: number, limit = 10): Promise<{ recommendations: Article[] }> => {
     return handleResponse(await fetch(`${API_BASE}/recommend?user_id=${userId}&limit=${limit}`));
 };
