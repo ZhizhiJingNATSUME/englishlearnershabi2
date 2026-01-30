@@ -47,10 +47,7 @@ export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> =
     return handleResponse(await fetch(`${API_BASE}/articles/${id}/analysis`));
 };
 
-export const getArticleTranslation = async (
-    id: number,
-    targetLang: string = 'zh-CN'
-): Promise<{ article_id: number; target_language: string; translation?: string; paragraphs?: { original: string; translation: string }[] }> => {
+export const getArticleTranslation = async (id: number, targetLang: string = 'zh-CN'): Promise<{ article_id: number; target_language: string; translation: string }> => {
     return handleResponse(await fetch(`${API_BASE}/articles/${id}/translation?target_lang=${encodeURIComponent(targetLang)}`));
 };
 

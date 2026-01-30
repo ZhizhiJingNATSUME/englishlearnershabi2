@@ -31,14 +31,12 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
     const [addedWords, setAddedWords] = useState<Set<string>>(new Set());
     const [addingWord, setAddingWord] = useState(false);
     const [translation, setTranslation] = useState('');
-    const [translationPairs, setTranslationPairs] = useState<{ original: string; translation: string }[]>([]);
     const [translationLoading, setTranslationLoading] = useState(false);
     const [translationError, setTranslationError] = useState('');
     const fontSize = 18; // Fixed font size for now
 
     useEffect(() => {
         setTranslation('');
-        setTranslationPairs([]);
         setTranslationError('');
     }, [article.id]);
 
@@ -51,11 +49,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
             setTranslationError('');
             try {
                 const res = await api.getArticleTranslation(article.id);
-                if (res.paragraphs && res.paragraphs.length > 0) {
-                    setTranslationPairs(res.paragraphs);
-                } else {
-                    setTranslation(res.translation || '');
-                }
+                setTranslation(res.translation);
             } catch (err) {
                 console.error('Failed to load translation:', err);
                 setTranslationError('Translation is unavailable right now.');
@@ -308,21 +302,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                     {!translationLoading && translationError && (
                                         <p className="text-sm text-red-500">{translationError}</p>
                                     )}
-                                    {!translationLoading && !translationError && translationPairs.length > 0 && (
-                                        <div className="space-y-6">
-                                            {translationPairs.map((pair, idx) => (
-                                                <div key={idx} className="grid gap-4 md:grid-cols-2">
-                                                    <p className="leading-relaxed text-slate-700 dark:text-slate-200">
-                                                        {pair.original}
-                                                    </p>
-                                                    <p className="leading-relaxed text-emerald-700 dark:text-emerald-300">
-                                                        {pair.translation}
-                                                    </p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {!translationLoading && !translationError && translationPairs.length === 0 && translation && (
+                                    {!translationLoading && !translationError && translation && (
                                         translation.split('\n\n').map((paragraph, idx) => (
                                             <p key={idx} className="leading-relaxed">
                                                 {paragraph}
