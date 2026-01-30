@@ -1,4 +1,4 @@
-==== 01/14/2026 Wed 23:21:55.95 ==== 
+==== 01/17/2026 Sat 20:27:05.11 ==== 
 Project dir: C:\Users\jingz\englishlearnershabi2
 Looking in indexes: https://pypi.org/simple, https://pypi.ngc.nvidia.com
 Requirement already satisfied: flask==3.0.0 in c:\users\jingz\englishlearnershabi2\venv\lib\site-packages (from -r C:\Users\jingz\englishlearnershabi2\requirements.txt (line 2)) (3.0.0)
@@ -8,7 +8,7 @@ Collecting sqlalchemy==2.0.23 (from -r C:\Users\jingz\englishlearnershabi2\requi
 Requirement already satisfied: python-multipart==0.0.6 in c:\users\jingz\englishlearnershabi2\venv\lib\site-packages (from -r C:\Users\jingz\englishlearnershabi2\requirements.txt (line 9)) (0.0.6)
 Collecting openai-whisper==20231117 (from -r C:\Users\jingz\englishlearnershabi2\requirements.txt (line 12))
   Downloading openai-whisper-20231117.tar.gz (798 kB)
-     ---------------------------------------- 798.6/798.6 kB 38.1 MB/s  0:00:00
+     ---------------------------------------- 798.6/798.6 kB 41.0 MB/s  0:00:00
   Installing build dependencies: started
   Installing build dependencies: finished with status 'done'
   Getting requirements to build wheel: started
@@ -29,16 +29,16 @@ Collecting openai-whisper==20231117 (from -r C:\Users\jingz\englishlearnershabi2
                                ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
     File "C:\Users\jingz\englishlearnershabi2\venv\Lib\site-packages\pip\_vendor\pyproject_hooks\_in_process\_in_process.py", line 143, in get_requires_for_build_wheel
       return hook(config_settings)
-    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-rqsm97tp\overlay\Lib\site-packages\setuptools\build_meta.py", line 331, in get_requires_for_build_wheel
+    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-nwys_clc\overlay\Lib\site-packages\setuptools\build_meta.py", line 331, in get_requires_for_build_wheel
       return self._get_build_requires(config_settings, requirements=[])
              ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-rqsm97tp\overlay\Lib\site-packages\setuptools\build_meta.py", line 301, in _get_build_requires
+    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-nwys_clc\overlay\Lib\site-packages\setuptools\build_meta.py", line 301, in _get_build_requires
       self.run_setup()
       ~~~~~~~~~~~~~~^^
-    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-rqsm97tp\overlay\Lib\site-packages\setuptools\build_meta.py", line 512, in run_setup
+    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-nwys_clc\overlay\Lib\site-packages\setuptools\build_meta.py", line 512, in run_setup
       super().run_setup(setup_script=setup_script)
       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-rqsm97tp\overlay\Lib\site-packages\setuptools\build_meta.py", line 317, in run_setup
+    File "C:\Users\jingz\AppData\Local\Temp\pip-build-env-nwys_clc\overlay\Lib\site-packages\setuptools\build_meta.py", line 317, in run_setup
       exec(code, locals())
       ~~~~^^^^^^^^^^^^^^^^
     File "<string>", line 21, in <module>
