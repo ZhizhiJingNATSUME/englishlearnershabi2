@@ -1,6 +1,6 @@
 import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5001/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 
 const handleResponse = async (response: Response) => {
     if (!response.ok) {
