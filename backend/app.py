@@ -1568,7 +1568,7 @@ IMPORTANT DISTINCTIONS:
         
         # 使用 Gemini 2.5 Flash 模型
         model = genai.GenerativeModel(
-            model_name="models/gemini-2.0-flash-exp",
+            model_name="models/gemini-2.5-flash-lite",
             generation_config={
                 "temperature": 0.7,
                 "max_output_tokens": 2048,
@@ -1817,7 +1817,7 @@ def call_english_pilot_llm(messages: list, scenario: dict, level: str) -> dict:
 
     try:
         model = genai.GenerativeModel(
-            model_name="models/gemini-2.0-flash-exp",
+            model_name="models/gemini-2.5-flash-lite",
             generation_config={
                 "temperature": 0.6,
                 "max_output_tokens": 1024,
@@ -2012,7 +2012,7 @@ Important:
         print(f"🔄 正在调用 Gemini API 评估口语... (字数: {word_count})")
         
         model = genai.GenerativeModel(
-            model_name="models/gemini-2.0-flash-exp",
+            model_name="models/gemini-2.5-flash-lite",
             generation_config={
                 "temperature": 0.7,
                 "max_output_tokens": 1024,
