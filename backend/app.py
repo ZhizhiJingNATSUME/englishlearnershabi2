@@ -820,11 +820,13 @@ Article titles: {titles_preview}
             }), 502
         return jsonify({"level": level, "raw": response})
     except Exception as e:
+        detail = str(e)
+        status = 503 if any(token in detail.lower() for token in ["token", "unauthorized", "forbidden", "401", "403"]) else 500
         return jsonify({
             "error": "PROFICIENCY_FAILED",
             "message": "Failed to estimate proficiency.",
-            "detail": str(e)
-        }), 500
+            "detail": detail
+        }), status
 
 # ========== 推荐相关API ==========
 
