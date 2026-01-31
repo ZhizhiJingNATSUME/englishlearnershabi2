@@ -1,4 +1,4 @@
-import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult } from '../types';
+import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult, EnglishPilotScenario, EnglishPilotResponse, EnglishPilotMessage } from '../types';
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 
@@ -31,16 +31,24 @@ export const getUserProfiles = async (username: string): Promise<User[]> => {
     return handleResponse(await fetch(`${API_BASE}/users?username=${username}`));
 };
 
+const mapArticle = (article: any): Article => ({
+    ...article,
+    imageUrl: article.imageUrl || article.image_url || article.imageUrl,
+});
+
 // Article related
-export const getArticles = async (category?: string, level?: string): Promise<{ articles: Article[] }> => {
+export const getArticles = async (category?: string, level?: string, generateImages: boolean = true): Promise<{ articles: Article[] }> => {
     const params = new URLSearchParams();
     if (category) params.append('category', category);
     if (level) params.append('level', level);
-    return handleResponse(await fetch(`${API_BASE}/articles?${params.toString()}`));
+    if (!generateImages) params.append('generate_images', '0');
+    const data = await handleResponse(await fetch(`${API_BASE}/articles?${params.toString()}`));
+    return { articles: (data.articles || []).map(mapArticle) };
 };
 
 export const getArticle = async (id: number): Promise<Article> => {
-    return handleResponse(await fetch(`${API_BASE}/articles/${id}`));
+    const data = await handleResponse(await fetch(`${API_BASE}/articles/${id}`));
+    return mapArticle(data);
 };
 
 export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> => {
@@ -48,7 +56,21 @@ export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> =
 };
 
 export const getRecommendations = async (userId: number, limit = 10): Promise<{ recommendations: Article[] }> => {
-    return handleResponse(await fetch(`${API_BASE}/recommend?user_id=${userId}&limit=${limit}`));
+    const data = await handleResponse(await fetch(`${API_BASE}/recommend?user_id=${userId}&limit=${limit}`));
+    return { recommendations: (data.recommendations || []).map(mapArticle) };
+};
+
+export const generateArticleImage = async (articleId: number, regenerate: boolean = false): Promise<{ image_url: string; cached: boolean }> => {
+    return handleResponse(await fetch(`${API_BASE}/articles/${articleId}/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerate }),
+    }));
+};
+
+export const getArticleTranslation = async (articleId: number, language: string): Promise<{ paragraphs: { original: string; translation: string }[]; target_language: string }> => {
+    const params = new URLSearchParams({ language });
+    return handleResponse(await fetch(`${API_BASE}/articles/${articleId}/translation?${params.toString()}`));
 };
 
 // History
@@ -169,5 +191,32 @@ export const getUserProfile = async (userId: number): Promise<any> => {
 export const refreshUserProfile = async (userId: number): Promise<{ message: string }> => {
     return handleResponse(await fetch(`${API_BASE}/users/${userId}/refresh_profile`, {
         method: 'POST',
+    }));
+};
+
+export const chatEnglishPilot = async (data: {
+    user_id: number;
+    scenario: EnglishPilotScenario;
+    level: string;
+    messages: EnglishPilotMessage[];
+}): Promise<EnglishPilotResponse> => {
+    return handleResponse(await fetch(`${API_BASE}/english_pilot/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    }));
+};
+
+export const transcribeEnglishPilotAudio = async (audio: Blob): Promise<{ transcription: string }> => {
+    const extension = audio.type.includes('mp4')
+        ? 'mp4'
+        : audio.type.includes('ogg')
+            ? 'ogg'
+            : 'webm';
+    const formData = new FormData();
+    formData.append('audio', audio, `english-pilot.${extension}`);
+    return handleResponse(await fetch(`${API_BASE}/english_pilot/stt`, {
+        method: 'POST',
+        body: formData,
     }));
 };

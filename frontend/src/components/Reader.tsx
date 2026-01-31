@@ -1,15 +1,17 @@
 // src/components/Reader.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     X,
     Settings,
     BookOpen,
     GraduationCap,
     Plus,
-    Check
+    Check,
+    Languages
 } from 'lucide-react';
 import type { Article, ArticleAnalysis, HighlightItem } from '../types';
 import ReactMarkdown from 'react-markdown';
+import { getArticleTranslation } from '../services/api';
 
 interface ReaderProps {
     article: Article;
@@ -28,6 +30,11 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
     const [selectedHighlight, setSelectedHighlight] = useState<HighlightItem | null>(null);
     const [addedWords, setAddedWords] = useState<Set<string>>(new Set());
     const [addingWord, setAddingWord] = useState(false);
+    const [translationEnabled, setTranslationEnabled] = useState(false);
+    const [translationLanguage, setTranslationLanguage] = useState('zh-CN');
+    const [translationParagraphs, setTranslationParagraphs] = useState<{ original: string; translation: string }[]>([]);
+    const [translationLoading, setTranslationLoading] = useState(false);
+    const [translationError, setTranslationError] = useState('');
     const fontSize = 18; // Fixed font size for now
 
     // Helper to escape regex special characters and normalize whitespace
@@ -161,6 +168,29 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
         }
     };
 
+    useEffect(() => {
+        if (!translationEnabled || mode !== 'clean') {
+            return;
+        }
+        if (!article.id) {
+            return;
+        }
+        const fetchTranslation = async () => {
+            setTranslationLoading(true);
+            setTranslationError('');
+            try {
+                const data = await getArticleTranslation(article.id, translationLanguage);
+                setTranslationParagraphs(data.paragraphs || []);
+            } catch (err) {
+                console.error('Failed to load translation:', err);
+                setTranslationError('Unable to load translation. Please try again.');
+            } finally {
+                setTranslationLoading(false);
+            }
+        };
+        fetchTranslation();
+    }, [translationEnabled, translationLanguage, article.id, mode]);
+
     return (
         <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950 flex flex-col md:flex-row animate-in fade-in duration-300">
             {/* ... sidebar/header code remains implicit or I should include enough context ... */}
@@ -200,6 +230,28 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                     </div>
 
                     <div className="flex items-center space-x-2">
+                        <button
+                            onClick={() => setTranslationEnabled((prev) => !prev)}
+                            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                translationEnabled
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
+                            }`}
+                        >
+                            <Languages size={14} />
+                            <span>{translationEnabled ? 'Translation On' : 'Translation Off'}</span>
+                        </button>
+                        {translationEnabled && (
+                            <select
+                                value={translationLanguage}
+                                onChange={(event) => setTranslationLanguage(event.target.value)}
+                                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                <option value="zh-CN">Chinese</option>
+                                <option value="es">Spanish</option>
+                                <option value="fr">French</option>
+                            </select>
+                        )}
                         <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
                             <Settings size={20} />
                         </button>
@@ -229,7 +281,31 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             style={{ fontSize: `${fontSize}px` }}
                         >
                             {mode === 'clean' ? (
-                                <ReactMarkdown>{article.content || ''}</ReactMarkdown>
+                                translationEnabled ? (
+                                    <div className="space-y-6">
+                                        {translationLoading && (
+                                            <p className="text-sm text-slate-500">Loading translation...</p>
+                                        )}
+                                        {translationError && (
+                                            <p className="text-sm text-red-500">{translationError}</p>
+                                        )}
+                                        {!translationLoading && !translationError && translationParagraphs.length === 0 && (
+                                            <p className="text-sm text-slate-500">No translation available.</p>
+                                        )}
+                                        {translationParagraphs.map((paragraph, index) => (
+                                            <div key={`${paragraph.original}-${index}`} className="grid gap-4 md:grid-cols-2">
+                                                <div className="rounded-xl bg-slate-50 p-4 text-slate-700 shadow-sm dark:bg-slate-900/40 dark:text-slate-200 whitespace-pre-wrap">
+                                                    {paragraph.original}
+                                                </div>
+                                                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-900 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100 whitespace-pre-wrap">
+                                                    {paragraph.translation}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <ReactMarkdown>{article.content || ''}</ReactMarkdown>
+                                )
                             ) : (
                                 // For learning mode, we still use the segments, but we wrap in pre-wrap to preserve existing newlines
                                 <div className="whitespace-pre-wrap">
