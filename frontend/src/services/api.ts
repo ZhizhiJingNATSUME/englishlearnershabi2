@@ -198,3 +198,14 @@ export const transcribeEnglishPilotAudio = async (audio: Blob): Promise<{ transc
         body: formData,
     }));
 };
+
+export const translateArticleSegment = async (data: {
+    text: string;
+    target_language?: string;
+}): Promise<{ translation: string }> => {
+    return handleResponse(await fetch(`${API_BASE}/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    }));
+};
