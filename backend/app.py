@@ -16,6 +16,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sqlalchemy.orm import sessionmaker
+from huggingface_hub import InferenceClient
 
 from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, WritingHistory, SpeakingHistory
 from recommender import ArticleRecommender
@@ -722,7 +723,7 @@ def get_article_analysis(article_id):
 
 @app.route('/api/translate', methods=['POST'])
 def translate_article_segment():
-    """Translate a text segment using Gemini 2.5 Flash."""
+    """Translate a text segment using Gemini 2.5 Flash with fallback APIs."""
     data = request.json or {}
     text = (data.get('text') or '').strip()
     target_language = data.get('target_language') or 'zh-CN'
@@ -731,6 +732,38 @@ def translate_article_segment():
         return jsonify({'error': 'Text is required'}), 400
 
     gemini_key = os.getenv('GEMINI_API_KEY')
+    translated = ""
+    gemini_error = None
+
+    if gemini_key:
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_key)
+
+        prompt = f"""Translate the following English text into {target_language}.
+Return only the translated text without additional commentary.
+
+Text:
+{text}"""
+        try:
+            model = genai.GenerativeModel(
+                model_name="models/gemini-2.5-flash",
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 1024,
+                }
+            )
+            response = model.generate_content(prompt)
+            translated = (response.text or '').strip()
+        except Exception as e:
+            gemini_error = str(e)
+
+    if translated:
+        return jsonify({"translation": translated, "provider": "gemini"})
+
+    fallback = translate_text(text, source_lang="en", target_lang=target_language)
+    if fallback:
+        return jsonify({"translation": fallback, "provider": "fallback"})
+
     if not gemini_key:
         return jsonify({
             "error": "GEMINI_API_KEY_NOT_CONFIGURED",
@@ -738,39 +771,60 @@ def translate_article_segment():
             "detail": "请运行 configure.py 配置 GEMINI_API_KEY 以启用翻译功能"
         }), 503
 
-    import google.generativeai as genai
-    genai.configure(api_key=gemini_key)
+    error_text = gemini_error or "Translation failed"
+    status = 429 if '429' in error_text or 'rate' in error_text.lower() else 502
+    return jsonify({
+        "error": "TRANSLATION_FAILED",
+        "message": "Translation failed",
+        "detail": error_text
+    }), status
 
-    prompt = f"""Translate the following English text into {target_language}.
-Return only the translated text without additional commentary.
+@app.route('/api/proficiency', methods=['POST'])
+def estimate_proficiency():
+    """Estimate CEFR proficiency using Qwen."""
+    data = request.json or {}
+    articles_read = data.get('articles_read', 0)
+    words_learned = data.get('words_learned', 0)
+    titles = data.get('article_titles', []) or []
+    titles_preview = ', '.join(titles[:10])
 
-Text:
-{text}"""
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token:
+        return jsonify({
+            "error": "HF_TOKEN_NOT_CONFIGURED",
+            "message": "HuggingFace token is not configured for Qwen.",
+        }), 503
+
+    prompt = f"""
+You are an English proficiency assessor. Estimate a rough CEFR level based on the metrics below.
+Return ONLY one label from: A1, A2, B1, B2, C1, C2.
+
+Articles read: {articles_read}
+Words learned: {words_learned}
+Article titles: {titles_preview}
+""".strip()
+
     try:
-        model = genai.GenerativeModel(
-            model_name="models/gemini-2.5-flash",
-            generation_config={
-                "temperature": 0.2,
-                "max_output_tokens": 1024,
-            }
+        client = InferenceClient(model="Qwen/Qwen2.5-72B-Instruct", token=hf_token)
+        response = client.text_generation(
+            prompt,
+            max_new_tokens=20,
+            temperature=0.2,
         )
-        response = model.generate_content(prompt)
-        translated = (response.text or '').strip()
-        if not translated:
+        match = re.search(r'\\b(A1|A2|B1|B2|C1|C2)\\b', response or '')
+        level = match.group(1) if match else (response or '').strip()
+        if not level:
             return jsonify({
                 "error": "EMPTY_RESPONSE",
-                "message": "❌ 翻译返回空内容",
-                "detail": "Gemini API返回了空响应"
+                "message": "Qwen did not return a proficiency level."
             }), 502
-        return jsonify({"translation": translated})
+        return jsonify({"level": level, "raw": response})
     except Exception as e:
-        error_text = str(e)
-        status = 429 if '429' in error_text or 'rate' in error_text.lower() else 500
         return jsonify({
-            "error": "TRANSLATION_FAILED",
-            "message": "Translation failed",
-            "detail": error_text
-        }), status
+            "error": "PROFICIENCY_FAILED",
+            "message": "Failed to estimate proficiency.",
+            "detail": str(e)
+        }), 500
 
 # ========== 推荐相关API ==========
 

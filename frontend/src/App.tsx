@@ -29,6 +29,9 @@ function App() {
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [proficiencyLevel, setProficiencyLevel] = useState('');
+  const [proficiencyLoading, setProficiencyLoading] = useState(false);
+  const [proficiencyError, setProficiencyError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState<string[]>(['technology', 'science']);
@@ -82,10 +85,14 @@ function App() {
           setQuizAnswer(null);
           setQuizFeedback(null);
         } else if (currentView === 'stats') {
-          const res = await api.getUserStats(user.id);
-          console.log('📊 Stats API response:', res);
+          const [statsRes, historyRes] = await Promise.all([
+            api.getUserStats(user.id),
+            api.getReadingHistory(user.id),
+          ]);
+          console.log('📊 Stats API response:', statsRes);
           console.log('User ID:', user.id);
-          setStats(res);
+          setStats(statsRes);
+          setHistory(historyRes.history);
         }
       } catch (err) {
         console.error('Failed to fetch data:', err);
@@ -96,6 +103,42 @@ function App() {
 
     fetchData();
   }, [user, currentView, selectedVocabList]);
+
+  useEffect(() => {
+    if (currentView !== 'stats' || !stats) return;
+    const runEstimate = async () => {
+      setProficiencyLoading(true);
+      setProficiencyError('');
+      try {
+        const titles = history.map((item) => item.title).filter(Boolean);
+        const response = await api.getProficiencyEstimate({
+          articles_read: stats.total_articles,
+          words_learned: stats.vocabulary_count,
+          article_titles: titles,
+        });
+        setProficiencyLevel(response.level);
+      } catch (err) {
+        console.error('Failed to estimate proficiency:', err);
+        setProficiencyError('Unable to estimate proficiency right now.');
+      } finally {
+        setProficiencyLoading(false);
+      }
+    };
+    runEstimate();
+  }, [currentView, stats, history]);
+
+  const proficiencyPercentMap: Record<string, number> = {
+    A1: 20,
+    A2: 30,
+    B1: 50,
+    B2: 65,
+    C1: 80,
+    C2: 95,
+  };
+  const proficiencyPercent = proficiencyPercentMap[proficiencyLevel] ?? 0;
+  const circleRadius = 28;
+  const circleCircumference = 2 * Math.PI * circleRadius;
+  const circleOffset = circleCircumference - (proficiencyPercent / 100) * circleCircumference;
 
   const handleDiscoverFetch = async () => {
     if (!user) return;
@@ -414,7 +457,50 @@ function App() {
               )}
               {!isLoading && stats && (
                 <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500 text-slate-900 dark:text-white">
-                  <h1 className="text-3xl font-bold">Learning Progress</h1>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <h1 className="text-3xl font-bold">Learning Progress</h1>
+                    <div className="flex items-center gap-4 rounded-3xl border border-slate-100 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                      <div className="relative h-16 w-16">
+                        <svg className="h-16 w-16 -rotate-90" viewBox="0 0 72 72">
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r={circleRadius}
+                            stroke="currentColor"
+                            strokeWidth="6"
+                            fill="none"
+                            className="text-slate-200 dark:text-slate-700"
+                          />
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r={circleRadius}
+                            stroke="currentColor"
+                            strokeWidth="6"
+                            fill="none"
+                            strokeDasharray={circleCircumference}
+                            strokeDashoffset={circleOffset}
+                            strokeLinecap="round"
+                            className="text-blue-600 transition-all duration-500"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                            {proficiencyLoading ? '...' : (proficiencyLevel || '—')}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-slate-400">Estimated Level</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                          {proficiencyLoading && 'Assessing with Qwen...'}
+                          {!proficiencyLoading && proficiencyError && proficiencyError}
+                          {!proficiencyLoading && !proficiencyError && proficiencyLevel && `Estimated CEFR: ${proficiencyLevel}`}
+                          {!proficiencyLoading && !proficiencyError && !proficiencyLevel && 'No estimate yet.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
               
                   {/* 阅读统计 */}
                   <div>
