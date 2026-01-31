@@ -1,4 +1,4 @@
-import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult } from '../types';
+import type { Article, ArticleAnalysis, ReadingHistory, User, UserStats, VocabularyItem, LearningWord, VocabularyQuizQuestion, DiscoverStats, TestQuestion, TestArticle, TestResult, EnglishPilotScenario, EnglishPilotResponse, EnglishPilotMessage } from '../types';
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 
@@ -169,5 +169,32 @@ export const getUserProfile = async (userId: number): Promise<any> => {
 export const refreshUserProfile = async (userId: number): Promise<{ message: string }> => {
     return handleResponse(await fetch(`${API_BASE}/users/${userId}/refresh_profile`, {
         method: 'POST',
+    }));
+};
+
+export const chatEnglishPilot = async (data: {
+    user_id: number;
+    scenario: EnglishPilotScenario;
+    level: string;
+    messages: EnglishPilotMessage[];
+}): Promise<EnglishPilotResponse> => {
+    return handleResponse(await fetch(`${API_BASE}/english_pilot/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    }));
+};
+
+export const transcribeEnglishPilotAudio = async (audio: Blob): Promise<{ transcription: string }> => {
+    const extension = audio.type.includes('mp4')
+        ? 'mp4'
+        : audio.type.includes('ogg')
+            ? 'ogg'
+            : 'webm';
+    const formData = new FormData();
+    formData.append('audio', audio, `english-pilot.${extension}`);
+    return handleResponse(await fetch(`${API_BASE}/english_pilot/stt`, {
+        method: 'POST',
+        body: formData,
     }));
 };
