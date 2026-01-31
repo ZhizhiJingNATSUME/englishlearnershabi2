@@ -789,11 +789,17 @@ def estimate_proficiency():
     titles_preview = ', '.join(titles[:10])
 
     hf_token = os.environ.get("HF_TOKEN", "")
-    if not hf_token:
-        return jsonify({
-            "error": "HF_TOKEN_NOT_CONFIGURED",
-            "message": "HuggingFace token is not configured for Qwen.",
-        }), 503
+
+    def heuristic_level() -> str:
+        if articles_read >= 100 or words_learned >= 2000:
+            return "C1"
+        if articles_read >= 60 or words_learned >= 1200:
+            return "B2"
+        if articles_read >= 30 or words_learned >= 600:
+            return "B1"
+        if articles_read >= 10 or words_learned >= 200:
+            return "A2"
+        return "A1"
 
     prompt = f"""
 You are an English proficiency assessor. Estimate a rough CEFR level based on the metrics below.
@@ -804,6 +810,13 @@ Words learned: {words_learned}
 Article titles: {titles_preview}
 """.strip()
 
+    if not hf_token:
+        return jsonify({
+            "level": heuristic_level(),
+            "provider": "heuristic",
+            "message": "HuggingFace token is not configured for Qwen.",
+        })
+
     try:
         client = InferenceClient(model="Qwen/Qwen2.5-72B-Instruct", token=hf_token)
         response = client.text_generation(
@@ -813,20 +826,21 @@ Article titles: {titles_preview}
         )
         match = re.search(r'\\b(A1|A2|B1|B2|C1|C2)\\b', response or '')
         level = match.group(1) if match else (response or '').strip()
-        if not level:
-            return jsonify({
-                "error": "EMPTY_RESPONSE",
-                "message": "Qwen did not return a proficiency level."
-            }), 502
-        return jsonify({"level": level, "raw": response})
+        if level:
+            return jsonify({"level": level, "raw": response, "provider": "qwen"})
+        return jsonify({
+            "level": heuristic_level(),
+            "provider": "heuristic",
+            "message": "Qwen did not return a proficiency level."
+        })
     except Exception as e:
         detail = str(e)
-        status = 503 if any(token in detail.lower() for token in ["token", "unauthorized", "forbidden", "401", "403"]) else 500
         return jsonify({
-            "error": "PROFICIENCY_FAILED",
-            "message": "Failed to estimate proficiency.",
+            "level": heuristic_level(),
+            "provider": "heuristic",
+            "message": "Qwen failed; using heuristic estimate.",
             "detail": detail
-        }), status
+        })
 
 # ========== 推荐相关API ==========
 
