@@ -21,6 +21,14 @@ from models import init_db, get_session, User, Article, ReadingHistory, Vocabula
 from recommender import ArticleRecommender
 from question_generator import QuestionGenerator
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv()
+
 app = Flask(__name__)
 CORS(app)
 
