@@ -10,6 +10,7 @@ import random
 import asyncio
 import csv
 import requests
+import base64
 from collections import Counter
 from typing import Optional
 from datetime import datetime
@@ -17,7 +18,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sqlalchemy.orm import sessionmaker
 
-from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, WritingHistory, SpeakingHistory
+from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, WritingHistory, SpeakingHistory, ArticleTranslation
 from recommender import ArticleRecommender
 from question_generator import QuestionGenerator
 
@@ -86,6 +87,21 @@ def ensure_vocabulary_columns():
     finally:
         conn.close()
 
+def ensure_article_columns():
+    """确保文章表包含AI图片字段"""
+    if not os.path.exists(DB_PATH):
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(articles)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "image_url" not in columns:
+            cursor.execute("ALTER TABLE articles ADD COLUMN image_url TEXT")
+        conn.commit()
+    finally:
+        conn.close()
+
 def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN") -> str:
     """使用免费翻译API翻译文本"""
     if not text:
@@ -126,6 +142,76 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN
     except requests.RequestException:
         return ""
     return translation if translation.strip().lower() != cleaned.lower() else ""
+
+def split_article_paragraphs(content: str) -> list[str]:
+    cleaned = (content or "").strip()
+    if not cleaned:
+        return []
+    paragraphs = [segment.strip() for segment in re.split(r'\n\s*\n+', cleaned) if segment.strip()]
+    if paragraphs:
+        return paragraphs
+    return [line.strip() for line in cleaned.splitlines() if line.strip()]
+
+def call_gemini_translation(paragraphs: list[str], target_language: str) -> list[str]:
+    import google.generativeai as genai
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_key:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+    genai.configure(api_key=gemini_key)
+    model = genai.GenerativeModel(
+        model_name="models/gemini-2.5-flash",
+        generation_config={
+            "temperature": 0.2,
+            "max_output_tokens": 2048,
+        },
+    )
+    prompt = f"""Translate each paragraph into {target_language}. Preserve meaning and paragraph structure.
+Return ONLY a JSON array of translated strings in the same order and same count as the input.
+
+Input paragraphs (JSON array):
+{json.dumps(paragraphs, ensure_ascii=False)}
+"""
+    response = model.generate_content(prompt)
+    response_text = response.text or ""
+    json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+    if not json_match:
+        raise ValueError("Translation JSON not found")
+    return json.loads(json_match.group(0))
+
+def generate_article_image(title: str) -> Optional[str]:
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        return None
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_key:
+        return None
+    genai.configure(api_key=gemini_key)
+    prompt = (
+        "Create a high-quality, text-free illustration for a news article titled: "
+        f"\"{title}\". The image should be visually relevant, clean, and suitable as a "
+        "header image."
+    )
+    try:
+        response = genai.generate_images(
+            model="imagen-3.0-generate-002",
+            prompt=prompt
+        )
+    except Exception:
+        return None
+    image_bytes = None
+    if hasattr(response, "images") and response.images:
+        first = response.images[0]
+        if isinstance(first, bytes):
+            image_bytes = first
+        elif hasattr(first, "data"):
+            image_bytes = first.data
+        elif hasattr(first, "image_bytes"):
+            image_bytes = first.image_bytes
+    if not image_bytes:
+        return None
+    encoded = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:image/png;base64,{encoded}"
 
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
@@ -281,6 +367,7 @@ def ensure_vocab_list_loaded(list_name: str) -> bool:
     return load_vocab_list_from_csv(list_name.upper(), csv_filename)
 
 ensure_vocabulary_columns()
+ensure_article_columns()
 
 def build_vocab_quiz(user_id: int):
     """基于用户生词本生成简单测验"""
@@ -588,6 +675,7 @@ def get_articles():
     category = request.args.get('category')
     difficulty = request.args.get('difficulty')
     limit = request.args.get('limit', type=int)  # Optional limit, defaults to None (all articles)
+    generate_images = request.args.get('generate_images', '1') != '0'
     
     session = Session()
     try:
@@ -607,7 +695,16 @@ def get_articles():
         articles = query.all()
         
         result = []
+        generated_count = 0
+        max_generation = 4
         for article in articles:
+            image_url = article.image_url
+            if generate_images and not image_url and article.title and generated_count < max_generation:
+                image_url = generate_article_image(article.title)
+                if image_url:
+                    article.image_url = image_url
+                    session.commit()
+                generated_count += 1
             result.append({
                 'id': article.id,
                 'title': article.title,
@@ -617,7 +714,8 @@ def get_articles():
                 'source_name': article.source_name,
                 'difficulty_level': article.difficulty_level,
                 'word_count': article.word_count,
-                'views': article.views
+                'views': article.views,
+                'image_url': image_url
             })
         
         return jsonify({'articles': result})
@@ -651,9 +749,98 @@ def get_article(article_id):
             'word_count': article.word_count,
             'sentence_count': article.sentence_count,
             'key_words': article.key_words,
-            'views': article.views
+            'views': article.views,
+            'image_url': article.image_url
         })
         
+    finally:
+        session.close()
+
+@app.route('/api/articles/<int:article_id>/image', methods=['POST'])
+def generate_article_image_endpoint(article_id):
+    """生成或重新生成文章封面图"""
+    data = request.json or {}
+    regenerate = bool(data.get('regenerate', False))
+
+    session = Session()
+    try:
+        article = session.query(Article).filter_by(id=article_id).first()
+        if not article:
+            return jsonify({'error': 'Article not found'}), 404
+        if article.image_url and not regenerate:
+            return jsonify({'image_url': article.image_url, 'cached': True})
+
+        image_url = generate_article_image(article.title)
+        if not image_url:
+            return jsonify({'error': 'IMAGE_GENERATION_FAILED'}), 502
+        article.image_url = image_url
+        session.commit()
+        return jsonify({'image_url': image_url, 'cached': False})
+    finally:
+        session.close()
+
+@app.route('/api/articles/<int:article_id>/translation', methods=['GET'])
+def get_article_translation(article_id):
+    """获取文章段落翻译"""
+    target_language = request.args.get('language', 'zh-CN')
+    refresh = request.args.get('refresh', '0') == '1'
+    session = Session()
+    try:
+        article = session.query(Article).filter_by(id=article_id).first()
+        if not article:
+            return jsonify({'error': 'Article not found'}), 404
+        if not refresh:
+            cached = session.query(ArticleTranslation).filter_by(
+                article_id=article_id,
+                target_language=target_language
+            ).first()
+            if cached:
+                return jsonify({
+                    'article_id': article_id,
+                    'target_language': target_language,
+                    'paragraphs': cached.translation_data
+                })
+
+        paragraphs = split_article_paragraphs(article.content)
+        if not paragraphs:
+            return jsonify({'error': 'Article content is empty'}), 400
+
+        translated_paragraphs = []
+        chunk_size = 6
+        for i in range(0, len(paragraphs), chunk_size):
+            chunk = paragraphs[i:i + chunk_size]
+            translations = call_gemini_translation(chunk, target_language)
+            if len(translations) != len(chunk):
+                raise ValueError("Translation count mismatch")
+            translated_paragraphs.extend(translations)
+
+        payload = [
+            {"original": original, "translation": translated}
+            for original, translated in zip(paragraphs, translated_paragraphs)
+        ]
+
+        record = session.query(ArticleTranslation).filter_by(
+            article_id=article_id,
+            target_language=target_language
+        ).first()
+        if record:
+            record.translation_data = payload
+        else:
+            record = ArticleTranslation(
+                article_id=article_id,
+                target_language=target_language,
+                translation_data=payload
+            )
+            session.add(record)
+        session.commit()
+
+        return jsonify({
+            'article_id': article_id,
+            'target_language': target_language,
+            'paragraphs': payload
+        })
+    except Exception as e:
+        return jsonify({'error': 'TRANSLATION_FAILED', 'detail': str(e)}), 500
     finally:
         session.close()
 

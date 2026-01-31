@@ -31,16 +31,24 @@ export const getUserProfiles = async (username: string): Promise<User[]> => {
     return handleResponse(await fetch(`${API_BASE}/users?username=${username}`));
 };
 
+const mapArticle = (article: any): Article => ({
+    ...article,
+    imageUrl: article.imageUrl || article.image_url || article.imageUrl,
+});
+
 // Article related
-export const getArticles = async (category?: string, level?: string): Promise<{ articles: Article[] }> => {
+export const getArticles = async (category?: string, level?: string, generateImages: boolean = true): Promise<{ articles: Article[] }> => {
     const params = new URLSearchParams();
     if (category) params.append('category', category);
     if (level) params.append('level', level);
-    return handleResponse(await fetch(`${API_BASE}/articles?${params.toString()}`));
+    if (!generateImages) params.append('generate_images', '0');
+    const data = await handleResponse(await fetch(`${API_BASE}/articles?${params.toString()}`));
+    return { articles: (data.articles || []).map(mapArticle) };
 };
 
 export const getArticle = async (id: number): Promise<Article> => {
-    return handleResponse(await fetch(`${API_BASE}/articles/${id}`));
+    const data = await handleResponse(await fetch(`${API_BASE}/articles/${id}`));
+    return mapArticle(data);
 };
 
 export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> => {
@@ -48,7 +56,21 @@ export const getArticleAnalysis = async (id: number): Promise<ArticleAnalysis> =
 };
 
 export const getRecommendations = async (userId: number, limit = 10): Promise<{ recommendations: Article[] }> => {
-    return handleResponse(await fetch(`${API_BASE}/recommend?user_id=${userId}&limit=${limit}`));
+    const data = await handleResponse(await fetch(`${API_BASE}/recommend?user_id=${userId}&limit=${limit}`));
+    return { recommendations: (data.recommendations || []).map(mapArticle) };
+};
+
+export const generateArticleImage = async (articleId: number, regenerate: boolean = false): Promise<{ image_url: string; cached: boolean }> => {
+    return handleResponse(await fetch(`${API_BASE}/articles/${articleId}/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerate }),
+    }));
+};
+
+export const getArticleTranslation = async (articleId: number, language: string): Promise<{ paragraphs: { original: string; translation: string }[]; target_language: string }> => {
+    const params = new URLSearchParams({ language });
+    return handleResponse(await fetch(`${API_BASE}/articles/${articleId}/translation?${params.toString()}`));
 };
 
 // History

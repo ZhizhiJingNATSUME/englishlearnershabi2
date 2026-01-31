@@ -158,6 +158,19 @@ function App() {
     }
   };
 
+  const handleRegenerateImage = async (article: Article) => {
+    try {
+      const res = await api.generateArticleImage(article.id, true);
+      setArticles((prev) =>
+        prev.map((item) =>
+          item.id === article.id ? { ...item, imageUrl: res.image_url } : item
+        )
+      );
+    } catch (err) {
+      console.error('Failed to regenerate image:', err);
+    }
+  };
+
   const handleSaveVocab = async (word: string, details?: {
     definition?: string;
     translation?: string;
@@ -331,7 +344,12 @@ function App() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {articles.map(article => (
-                  <ArticleCard key={article.id} article={article} onClick={handleOpenArticle} />
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    onClick={handleOpenArticle}
+                    onRegenerateImage={handleRegenerateImage}
+                  />
                 ))}
               </div>
             </div>

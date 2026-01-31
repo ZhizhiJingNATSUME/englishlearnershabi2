@@ -71,6 +71,9 @@ class Article(Base):
     # 统计信息
     views = Column(Integer, default=0)
     avg_completion_rate = Column(Float, default=0.0)
+
+    # AI 生成图片
+    image_url = Column(String(1000), nullable=True)
     
     # VOA 特定
     audio_url = Column(String(500), nullable=True)  # 预留音频
@@ -82,6 +85,21 @@ class Article(Base):
     # 关系
     reading_history = relationship("ReadingHistory", back_populates="article")
     analyses = relationship("ArticleAnalysis", back_populates="article", cascade="all, delete-orphan")
+
+
+class ArticleTranslation(Base):
+    """文章分段翻译缓存"""
+    __tablename__ = 'article_translations'
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, ForeignKey('articles.id', ondelete='CASCADE'), nullable=False)
+    target_language = Column(String(50), default='zh-CN')
+    translation_data = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('article_id', 'target_language', name='uix_article_translation'),
+    )
 
 
 class ArticleAnalysis(Base):
