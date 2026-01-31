@@ -512,6 +512,11 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                             </p>
                                         </div>
                                     ))}
+                                    {translationSegments.length === 0 && (
+                                        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700">
+                                            No translation yet. Tap “Translate” to begin.
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
