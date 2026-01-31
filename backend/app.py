@@ -115,20 +115,30 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "zh-CN
 
 def build_image_prompt(article: Article) -> str:
     """构建用于生成文章配图的提示词"""
+    title = (article.title or "").strip()
+    category = (article.category or "").strip()
     summary = (article.content or "").strip().replace("\n", " ")
-    summary = " ".join(summary.split()[:40])
-    parts = [article.title, article.category or "", summary]
+    summary = " ".join(summary.split()[:24])
+    parts = [title, f"Category: {category}" if category else "", summary]
     prompt = " ".join([p for p in parts if p]).strip()
     if not prompt:
         prompt = "English learning article illustration"
-    return f"{prompt}, editorial illustration, high quality, vivid colors, clean composition"
+    return (
+        f"{prompt}. Editorial illustration about the topic, no robots, no text, "
+        "no watermark, no logo, no QR code, high quality, vivid colors, clean composition"
+    )
 
 def generate_image_url(article: Article) -> str:
     """生成文章配图 URL（基于内容提示词）"""
     prompt = build_image_prompt(article)
     encoded = quote(prompt)
-    seed = article.id or random.randint(1000, 9999)
-    return f"https://image.pollinations.ai/prompt/{encoded}?width=1200&height=720&seed={seed}&nologo=true"
+    seed_source = prompt.encode("utf-8")
+    seed = int(hashlib.sha256(seed_source).hexdigest()[:8], 16)
+    model = os.getenv("POLLINATIONS_MODEL", "turbo")
+    return (
+        "https://image.pollinations.ai/prompt/"
+        f"{encoded}?width=1200&height=720&seed={seed}&nologo=true&model={model}"
+    )
 
 def generate_qwen_image(prompt: str) -> bytes:
     """使用 Qwen 图像模型生成图片数据"""
@@ -154,12 +164,15 @@ def generate_qwen_image(prompt: str) -> bytes:
         return b""
     return b""
 
-def get_image_filename(article: Article) -> str:
-    return f"article_{article.id}.png"
+def get_image_filename(article: Article, prompt: str) -> str:
+    prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:10]
+    article_id = article.id or random.randint(1000, 9999)
+    return f"article_{article_id}_{prompt_hash}.png"
 
 def ensure_article_image(session, article: Article) -> str:
     """确保文章有配图 URL"""
-    filename = get_image_filename(article)
+    prompt = build_image_prompt(article)
+    filename = get_image_filename(article, prompt)
     file_path = os.path.join(IMAGE_DIR, filename)
     image_url = f"{API_PUBLIC_BASE}/api/article_images/{filename}"
 
@@ -169,7 +182,6 @@ def ensure_article_image(session, article: Article) -> str:
             session.commit()
         return image_url
 
-    prompt = build_image_prompt(article)
     image_bytes = generate_qwen_image(prompt)
     if image_bytes:
         with open(file_path, "wb") as image_file:
@@ -212,6 +224,33 @@ def split_into_chunks(text: str, max_chars: int = 400) -> list[str]:
         chunks.append(current.strip())
     return chunks or [text.strip()]
 
+def split_article_paragraphs(text: str) -> list[str]:
+    """按段落拆分文本，兼容单行和空行分隔"""
+    if not text:
+        return []
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    if len(paragraphs) <= 1:
+        paragraphs = [p.strip() for p in re.split(r'\n+', text) if p.strip()]
+    if len(paragraphs) > 1:
+        return paragraphs
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text.strip()) if s.strip()]
+    if len(sentences) <= 1:
+        return [text.strip()] if text.strip() else []
+    grouped = []
+    current = []
+    word_count = 0
+    for sentence in sentences:
+        sentence_words = sentence.split()
+        if current and (len(current) >= 3 or word_count + len(sentence_words) > 120):
+            grouped.append(" ".join(current).strip())
+            current = []
+            word_count = 0
+        current.append(sentence)
+        word_count += len(sentence_words)
+    if current:
+        grouped.append(" ".join(current).strip())
+    return grouped
+
 def qwen_translate_text(text: str, target_lang: str) -> str:
     """使用 Qwen 模型翻译文本"""
     hf_token = os.getenv("HF_TOKEN", "")
@@ -253,7 +292,7 @@ def translate_article_text(text: str, target_lang: str) -> str:
     """翻译文章文本为指定语言，按段落返回"""
     if not text:
         return ""
-    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    paragraphs = split_article_paragraphs(text)
     translated_paragraphs = []
     for paragraph in paragraphs:
         chunks = split_into_chunks(paragraph)
@@ -814,33 +853,42 @@ def get_article_image(filename):
 def get_article_translation(article_id):
     """获取文章翻译"""
     target_lang = request.args.get('target_lang', default='zh-CN')
+    refresh = request.args.get('refresh', default='false').lower() in {'1', 'true', 'yes'}
     session = Session()
     try:
+        article = session.query(Article).filter_by(id=article_id).first()
+        if not article:
+            return jsonify({'error': 'Article not found'}), 404
+
         translation = session.query(ArticleTranslation).filter_by(
             article_id=article_id,
             target_language=target_lang
         ).first()
-        if translation:
+        if translation and not refresh:
+            original_paragraphs = split_article_paragraphs(article.content)
+            translated_paragraphs = split_article_paragraphs(translation.translation_text)
+            if len(original_paragraphs) > 1 and len(translated_paragraphs) < len(original_paragraphs):
+                refresh = True
+        if translation and not refresh:
             return jsonify({
                 'article_id': article_id,
                 'target_language': target_lang,
                 'translation': translation.translation_text
             })
 
-        article = session.query(Article).filter_by(id=article_id).first()
-        if not article:
-            return jsonify({'error': 'Article not found'}), 404
-
         translated_text = translate_article_text(article.content, target_lang)
         if not translated_text:
             return jsonify({'error': 'Translation failed'}), 500
 
-        translation = ArticleTranslation(
-            article_id=article_id,
-            target_language=target_lang,
-            translation_text=translated_text
-        )
-        session.add(translation)
+        if translation:
+            translation.translation_text = translated_text
+        else:
+            translation = ArticleTranslation(
+                article_id=article_id,
+                target_language=target_lang,
+                translation_text=translated_text
+            )
+            session.add(translation)
         session.commit()
 
         return jsonify({
