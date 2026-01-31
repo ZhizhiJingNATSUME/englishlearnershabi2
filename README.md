@@ -80,6 +80,151 @@ Start both Backend and Frontend with a single command:
 - **Backend API**: http://localhost:5000
 - **Frontend App**: http://localhost:5173
 
+## 🧩 Comprehensive Installation Guide
+
+This section covers a clean install from scratch, including system dependencies, Python/Node setup, API keys, and OS-specific steps.
+
+### ✅ Required Dependencies
+
+**System-level dependencies**
+- **Python**: 3.10+
+- **Node.js**: 18+
+- **FFmpeg**: Required for audio/voice features (English Pilot STT/TTS workflows)
+- **Git**: For cloning the repository
+
+**Python dependencies**
+- Install from `requirements.txt` (or `requirementsci.txt` for CI environments).
+
+**Frontend dependencies**
+- Installed via `npm install` in `frontend/`.
+
+### 🔐 API Keys & Configuration
+
+Create a `.env` file at the project root:
+```
+GEMINI_API_KEY=your_gemini_key
+NEWS_API_KEY=your_newsapi_key
+HF_TOKEN=your_huggingface_token
+SECRET_KEY=change-me
+```
+
+**Required keys**
+- `GEMINI_API_KEY`: Enables article analysis and translation features.
+- `NEWS_API_KEY`: Enables NewsAPI ingestion.
+- `HF_TOKEN`: Enables Hugging Face models (Qwen proficiency + image generation).
+
+### 🐍 Python Virtual Environment Setup
+
+#### Option A: Using `venv`
+```bash
+python -m venv .venv
+# Windows
+.venv\\Scripts\\activate
+# macOS/Linux
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### Option B: Using `uv` (recommended)
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+### 💻 OS-Specific Installation Steps
+
+#### Windows
+1. **Install Python 3.10+** from https://www.python.org/downloads/
+2. **Install Node.js 18+** from https://nodejs.org/
+3. **Install FFmpeg**:
+   - Use `winget`:
+     ```powershell
+     winget install Gyan.FFmpeg
+     ```
+   - Or download from https://ffmpeg.org/download.html and add it to `PATH`.
+4. **Clone & setup**:
+   ```powershell
+   git clone https://github.com/your-repo/faga-adaptive-english-teacher.git
+   cd faga-adaptive-english-teacher
+   copy .env.example .env
+   ```
+5. **Install backend deps** (see venv setup above).
+6. **Install frontend deps**:
+   ```powershell
+   cd frontend
+   npm install
+   ```
+7. **Run**:
+   ```powershell
+   cd ..
+   .\\start_all.sh
+   ```
+
+#### macOS
+1. **Install Python 3.10+** (Homebrew recommended):
+   ```bash
+   brew install python
+   ```
+2. **Install Node.js 18+**:
+   ```bash
+   brew install node
+   ```
+3. **Install FFmpeg**:
+   ```bash
+   brew install ffmpeg
+   ```
+4. **Clone & setup**:
+   ```bash
+   git clone https://github.com/your-repo/faga-adaptive-english-teacher.git
+   cd faga-adaptive-english-teacher
+   cp .env.example .env
+   ```
+5. **Install backend deps** (see venv setup above).
+6. **Install frontend deps**:
+   ```bash
+   cd frontend
+   npm install
+   ```
+7. **Run**:
+   ```bash
+   cd ..
+   ./start_all.sh
+   ```
+
+#### Linux (Ubuntu/Debian)
+1. **Install Python 3.10+ & Node.js 18+**:
+   ```bash
+   sudo apt update
+   sudo apt install -y python3 python3-venv python3-pip ffmpeg git
+   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+   sudo apt install -y nodejs
+   ```
+2. **Clone & setup**:
+   ```bash
+   git clone https://github.com/your-repo/faga-adaptive-english-teacher.git
+   cd faga-adaptive-english-teacher
+   cp .env.example .env
+   ```
+3. **Install backend deps** (see venv setup above).
+4. **Install frontend deps**:
+   ```bash
+   cd frontend
+   npm install
+   ```
+5. **Run**:
+   ```bash
+   cd ..
+   ./start_all.sh
+   ```
+
+### ✅ Verification Checklist
+After starting, verify:
+- Backend running at `http://localhost:5000`
+- Frontend running at `http://localhost:5173`
+- `.env` contains your API keys
+
 ## 📖 User Guide
 
 ### Reading Modes

@@ -6,18 +6,20 @@ import type { Article } from '../types';
 interface ArticleCardProps {
     article: Article;
     onClick: (article: Article) => void;
+    imageUrl?: string;
 }
 
-const ArticleCard: React.FC<ArticleCardProps> = ({ article, onClick }) => {
+const ArticleCard: React.FC<ArticleCardProps> = ({ article, onClick, imageUrl }) => {
+    const resolvedImageUrl = imageUrl || article.imageUrl;
     return (
         <div
             onClick={() => onClick(article)}
             className="group bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         >
             <div className="relative h-48 overflow-hidden bg-slate-100 dark:bg-slate-800">
-                {article.imageUrl ? (
+                {resolvedImageUrl ? (
                     <img
-                        src={article.imageUrl}
+                        src={resolvedImageUrl}
                         alt={article.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
