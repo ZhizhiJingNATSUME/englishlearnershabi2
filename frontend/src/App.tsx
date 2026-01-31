@@ -555,8 +555,6 @@ function App() {
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
                       <p className={`text-4xl font-black ${stat.color}`}>{stat.value}</p>
                     </div>
-                  ))}
-                </div>
                   </div>
 
                   {/* 写作统计 */}
