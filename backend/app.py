@@ -21,13 +21,39 @@ from models import init_db, get_session, User, Article, ReadingHistory, Vocabula
 from recommender import ArticleRecommender
 from question_generator import QuestionGenerator
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
+def load_env_file() -> None:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    env_path = os.path.join(repo_root, '.env')
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+        return
+    except ImportError:
+        pass
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, 'r', encoding='utf-8') as handle:
+            for line in handle:
+                cleaned = line.strip()
+                if not cleaned or cleaned.startswith('#') or '=' not in cleaned:
+                    continue
+                key, value = cleaned.split('=', 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except OSError:
+        return
 
-if load_dotenv:
-    load_dotenv()
+load_env_file()
+
+english_pilot_diagnostics = {
+    "last_error": None,
+    "last_model": None,
+    "last_models_tried": [],
+    "last_response_preview": None,
+}
 
 app = Flask(__name__)
 CORS(app)
@@ -1814,34 +1840,85 @@ def call_english_pilot_llm(messages: list, scenario: dict, level: str) -> dict:
 
     genai.configure(api_key=gemini_key)
     prompt = build_english_pilot_prompt(messages, scenario, level)
+    debug_enabled = os.getenv('ENGLISH_PILOT_DEBUG', '').lower() in {'1', 'true', 'yes'}
+    model_override = os.getenv('ENGLISH_PILOT_MODEL', '').strip()
+    model_candidates = [model_override] if model_override else ["models/gemini-2.5-flash-lite"]
 
-    try:
-        model = genai.GenerativeModel(
-            model_name="models/gemini-2.5-flash-lite",
-            generation_config={
-                "temperature": 0.6,
-                "max_output_tokens": 1024,
-            }
-        )
-        response = model.generate_content(prompt)
-        response_text = response.text or ""
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
+    def normalize_reply(text: str) -> str:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return "English Pilot: Let's practice English together."
+        if cleaned.lower().startswith("english pilot"):
+            return cleaned
+        return f"English Pilot: {cleaned}"
+
+    def safe_response(payload: dict, fallback_text: str = "") -> dict:
+        if not isinstance(payload, dict):
+            payload = {}
+        reply = normalize_reply(payload.get("reply", fallback_text))
+        refusal = payload.get("refusal", False)
+        tips = payload.get("tips") if isinstance(payload.get("tips"), list) else []
+        follow_up = payload.get("follow_up", "What would you like to say next?")
         return {
-            "reply": response_text.strip() or "English Pilot: Let's practice English together.",
-            "refusal": False,
-            "tips": [],
-            "follow_up": "What would you like to say next?"
+            "reply": reply,
+            "refusal": refusal,
+            "tips": tips,
+            "follow_up": follow_up
         }
-    except Exception as e:
-        print(f"❌ English Pilot error: {type(e).__name__}: {e}")
+
+    last_error = None
+    english_pilot_diagnostics["last_models_tried"] = model_candidates
+    english_pilot_diagnostics["last_error"] = None
+    english_pilot_diagnostics["last_model"] = None
+    english_pilot_diagnostics["last_response_preview"] = None
+    for model_name in model_candidates:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config={
+                    "temperature": 0.6,
+                    "max_output_tokens": 1024,
+                }
+            )
+            response = model.generate_content(prompt)
+            response_text = response.text or ""
+            english_pilot_diagnostics["last_model"] = model_name
+            english_pilot_diagnostics["last_response_preview"] = response_text[:200]
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    result = safe_response(json.loads(json_match.group(0)))
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ English Pilot JSON decode failed ({model_name}): {e}")
+                    result = safe_response({}, response_text)
+            else:
+                result = safe_response({}, response_text)
+            if debug_enabled:
+                result["debug"] = {"model": model_name}
+            return result
+        except Exception as e:
+            last_error = e
+            english_pilot_diagnostics["last_error"] = f"{type(e).__name__}: {e}"
+            print(f"❌ English Pilot error ({model_name}): {type(e).__name__}: {e}")
+            continue
+
+    if debug_enabled:
         return {
             "reply": "English Pilot: I had trouble generating a response. Let's continue with a simple question.",
             "refusal": False,
             "tips": ["Keep your answer short and clear."],
-            "follow_up": "Can you introduce yourself in one sentence?"
+            "follow_up": "Can you introduce yourself in one sentence?",
+            "debug": {
+                "error": f"{type(last_error).__name__}: {last_error}" if last_error else "Unknown error",
+                "models_tried": model_candidates
+            }
         }
+    return {
+        "reply": "English Pilot: I had trouble generating a response. Let's continue with a simple question.",
+        "refusal": False,
+        "tips": ["Keep your answer short and clear."],
+        "follow_up": "Can you introduce yourself in one sentence?"
+    }
 
 @app.route('/api/english_pilot/chat', methods=['POST'])
 def english_pilot_chat():
@@ -1855,6 +1932,66 @@ def english_pilot_chat():
 
     result = call_english_pilot_llm(messages, scenario, level)
     return jsonify(result)
+
+
+@app.route('/api/english_pilot/stt', methods=['POST'])
+def english_pilot_stt():
+    if 'audio' not in request.files:
+        return jsonify({'error': 'Audio file is required'}), 400
+
+    audio_file = request.files['audio']
+    if not audio_file or not audio_file.filename:
+        return jsonify({'error': 'Invalid audio file'}), 400
+
+    suffix = os.path.splitext(audio_file.filename)[-1] or '.webm'
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_audio:
+        audio_file.save(temp_audio.name)
+        temp_path = temp_audio.name
+
+    try:
+        load_whisper()
+        transcription = transcribe_audio_file(temp_path)
+        if transcription.startswith('[') and transcription.endswith(']'):
+            return jsonify({
+                'error': 'TRANSCRIPTION_FAILED',
+                'message': 'Audio transcription failed',
+                'detail': transcription
+            }), 500
+        return jsonify({'transcription': transcription})
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@app.route('/api/english_pilot/diagnostics', methods=['GET'])
+def english_pilot_diagnostics_endpoint():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    env_path = os.path.join(repo_root, '.env')
+    gemini_key = os.getenv('GEMINI_API_KEY', '')
+    masked_key = ""
+    if gemini_key:
+        masked_key = f"{gemini_key[:4]}...{gemini_key[-4:]}"
+    try:
+        import dotenv  # noqa: F401
+        dotenv_available = True
+    except ImportError:
+        dotenv_available = False
+    payload = {
+        "env_path": env_path,
+        "env_exists": os.path.exists(env_path),
+        "dotenv_available": dotenv_available,
+        "gemini_key_loaded": bool(gemini_key),
+        "gemini_key_length": len(gemini_key),
+        "gemini_key_masked": masked_key,
+        "model_override": os.getenv('ENGLISH_PILOT_MODEL', ''),
+        "debug_enabled": os.getenv('ENGLISH_PILOT_DEBUG', ''),
+        "last_error": english_pilot_diagnostics["last_error"],
+        "last_model": english_pilot_diagnostics["last_model"],
+        "last_models_tried": english_pilot_diagnostics["last_models_tried"],
+        "last_response_preview": english_pilot_diagnostics["last_response_preview"],
+        "working_dir": os.getcwd(),
+    }
+    return jsonify(payload)
 
 
 # ========== Speaking Coach API ==========
