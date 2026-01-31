@@ -6,9 +6,10 @@ import type { Article } from '../types';
 interface ArticleCardProps {
     article: Article;
     onClick: (article: Article) => void;
+    onRegenerateImage?: (article: Article) => void;
 }
 
-const ArticleCard: React.FC<ArticleCardProps> = ({ article, onClick }) => {
+const ArticleCard: React.FC<ArticleCardProps> = ({ article, onClick, onRegenerateImage }) => {
     return (
         <div
             onClick={() => onClick(article)}
@@ -26,6 +27,17 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, onClick }) => {
                         <BookOpen size={48} />
                     </div>
                 )}
+                {onRegenerateImage && (
+                    <button
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onRegenerateImage(article);
+                        }}
+                        className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-sm transition hover:bg-white"
+                    >
+                        Regenerate
+                    </button>
+                )}
                 <div className="absolute top-4 left-4 flex space-x-2">
                     <span className="px-2.5 py-1 bg-blue-600/90 text-white backdrop-blur-sm text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm">
                         {article.source}
@@ -41,7 +53,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, onClick }) => {
                     {article.title}
                 </h3>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-2 leading-relaxed">
-                    {article.summary || article.content.substring(0, 100) + '...'}
+                    {article.summary || (article.content ? `${article.content.substring(0, 100)}...` : 'No summary available.')}
                 </p>
 
                 <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
