@@ -9,6 +9,7 @@ import VocabularyPractice from './components/VocabularyPractice';
 import ReadingTest from './components/ReadingTest';
 import WritingCoach from './components/WritingCoach';
 import SpeakingCoach from './components/SpeakingCoach';
+import EnglishPilot from './components/EnglishPilot';
 import { DiscoverView } from './components/DiscoverView';
 import { useAuth } from './hooks/useAuth';
 import * as api from './services/api';
@@ -508,6 +509,10 @@ function App() {
 
           {currentView === 'speaking' && user && (
             <SpeakingCoach userId={user.id} />
+          )}
+
+          {currentView === 'english_pilot' && user && (
+            <EnglishPilot user={user} />
           )}
         </div>
       </main>
