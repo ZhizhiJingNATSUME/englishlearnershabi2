@@ -720,6 +720,58 @@ def get_article_analysis(article_id):
     finally:
         session.close()
 
+@app.route('/api/translate', methods=['POST'])
+def translate_article_segment():
+    """Translate a text segment using Gemini 2.5 Flash."""
+    data = request.json or {}
+    text = (data.get('text') or '').strip()
+    target_language = data.get('target_language') or 'zh-CN'
+
+    if not text:
+        return jsonify({'error': 'Text is required'}), 400
+
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_key:
+        return jsonify({
+            "error": "GEMINI_API_KEY_NOT_CONFIGURED",
+            "message": "⚠️ Gemini API Key未配置",
+            "detail": "请运行 configure.py 配置 GEMINI_API_KEY 以启用翻译功能"
+        }), 503
+
+    import google.generativeai as genai
+    genai.configure(api_key=gemini_key)
+
+    prompt = f"""Translate the following English text into {target_language}.
+Return only the translated text without additional commentary.
+
+Text:
+{text}"""
+    try:
+        model = genai.GenerativeModel(
+            model_name="models/gemini-2.5-flash",
+            generation_config={
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+            }
+        )
+        response = model.generate_content(prompt)
+        translated = (response.text or '').strip()
+        if not translated:
+            return jsonify({
+                "error": "EMPTY_RESPONSE",
+                "message": "❌ 翻译返回空内容",
+                "detail": "Gemini API返回了空响应"
+            }), 502
+        return jsonify({"translation": translated})
+    except Exception as e:
+        error_text = str(e)
+        status = 429 if '429' in error_text or 'rate' in error_text.lower() else 500
+        return jsonify({
+            "error": "TRANSLATION_FAILED",
+            "message": "Translation failed",
+            "detail": error_text
+        }), status
+
 # ========== 推荐相关API ==========
 
 @app.route('/api/recommend', methods=['GET'])
