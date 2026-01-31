@@ -645,8 +645,8 @@ export default function EnglishPilot({ user }: EnglishPilotProps) {
           </div>
 
           {!isVoiceMode && (
-            <div className="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-              <input
+            <div className="mt-4 flex items-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -656,6 +656,7 @@ export default function EnglishPilot({ user }: EnglishPilotProps) {
                   }
                 }}
                 placeholder="Type your reply here..."
+                rows={4}
                 className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-800"
               />
               <button

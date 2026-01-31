@@ -29,11 +29,15 @@ function App() {
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [proficiencyLevel, setProficiencyLevel] = useState('');
+  const [proficiencyLoading, setProficiencyLoading] = useState(false);
+  const [proficiencyError, setProficiencyError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState<string[]>(['technology', 'science']);
   const [discoverMessage, setDiscoverMessage] = useState('');
   const [selectedVocabList, setSelectedVocabList] = useState('');
+  const [libraryImages, setLibraryImages] = useState<Record<number, string>>({});
 
   // Reader state
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
@@ -82,10 +86,14 @@ function App() {
           setQuizAnswer(null);
           setQuizFeedback(null);
         } else if (currentView === 'stats') {
-          const res = await api.getUserStats(user.id);
-          console.log('📊 Stats API response:', res);
+          const [statsRes, historyRes] = await Promise.all([
+            api.getUserStats(user.id),
+            api.getReadingHistory(user.id),
+          ]);
+          console.log('📊 Stats API response:', statsRes);
           console.log('User ID:', user.id);
-          setStats(res);
+          setStats(statsRes);
+          setHistory(historyRes.history);
         }
       } catch (err) {
         console.error('Failed to fetch data:', err);
@@ -96,6 +104,67 @@ function App() {
 
     fetchData();
   }, [user, currentView, selectedVocabList]);
+
+  useEffect(() => {
+    if (currentView !== 'stats' || !stats) return;
+    const runEstimate = async () => {
+      setProficiencyLoading(true);
+      setProficiencyError('');
+      try {
+        const titles = history.map((item) => item.title).filter(Boolean);
+        const response = await api.getProficiencyEstimate({
+          articles_read: stats.total_articles,
+          words_learned: stats.vocabulary_count,
+          article_titles: titles,
+        });
+        setProficiencyLevel(response.level);
+      } catch (err) {
+        console.error('Failed to estimate proficiency:', err);
+        setProficiencyError('Unable to estimate proficiency right now.');
+      } finally {
+        setProficiencyLoading(false);
+      }
+    };
+    runEstimate();
+  }, [currentView, stats, history]);
+
+  useEffect(() => {
+    if (currentView !== 'library' || articles.length === 0) return;
+    const run = async () => {
+      const updates: Record<number, string> = {};
+      for (const article of articles) {
+        if (article.imageUrl || libraryImages[article.id]) continue;
+        try {
+          const result = await api.getArticleImage({
+            title: article.title,
+            summary: article.summary || '',
+          });
+          if (result.image) {
+            updates[article.id] = result.image;
+          }
+        } catch (err) {
+          console.error('Failed to generate article image:', err);
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setLibraryImages((prev) => ({ ...prev, ...updates }));
+      }
+    };
+    run();
+  }, [currentView, articles, libraryImages]);
+
+  const proficiencyPercentMap: Record<string, number> = {
+    A1: 20,
+    A2: 30,
+    B1: 50,
+    B2: 65,
+    C1: 80,
+    C2: 95,
+  };
+  const proficiencyPercent = proficiencyPercentMap[proficiencyLevel] ?? 0;
+  const circleRadius = 28;
+  const circleCircumference = 2 * Math.PI * circleRadius;
+  const circleOffset = circleCircumference - (proficiencyPercent / 100) * circleCircumference;
 
   const handleDiscoverFetch = async () => {
     if (!user) return;
@@ -331,7 +400,12 @@ function App() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {articles.map(article => (
-                  <ArticleCard key={article.id} article={article} onClick={handleOpenArticle} />
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    onClick={handleOpenArticle}
+                    imageUrl={libraryImages[article.id]}
+                  />
                 ))}
               </div>
             </div>
@@ -414,25 +488,75 @@ function App() {
               )}
               {!isLoading && stats && (
                 <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500 text-slate-900 dark:text-white">
-                  <h1 className="text-3xl font-bold">Learning Progress</h1>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <h1 className="text-3xl font-bold">Learning Progress</h1>
+                  </div>
               
+                  <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <h2 className="text-xl font-semibold mb-4 text-slate-700 dark:text-slate-300">🎯 Proficiency Snapshot</h2>
+                    <div className="flex flex-col items-center gap-6 md:flex-row">
+                      <div className="relative h-32 w-32">
+                        <svg className="h-32 w-32 -rotate-90" viewBox="0 0 72 72">
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r={circleRadius}
+                            stroke="currentColor"
+                            strokeWidth="6"
+                            fill="none"
+                            className="text-slate-200 dark:text-slate-700"
+                          />
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r={circleRadius}
+                            stroke="currentColor"
+                            strokeWidth="6"
+                            fill="none"
+                            strokeDasharray={circleCircumference}
+                            strokeDashoffset={circleOffset}
+                            strokeLinecap="round"
+                            className="text-blue-600 transition-all duration-500"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-2xl font-bold text-slate-700 dark:text-slate-200">
+                            {proficiencyLoading ? '...' : (proficiencyLevel || '—')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase text-slate-400">Estimated Level</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                          {proficiencyLoading && 'Assessing with Qwen...'}
+                          {!proficiencyLoading && proficiencyError && proficiencyError}
+                          {!proficiencyLoading && !proficiencyError && proficiencyLevel && `Estimated CEFR: ${proficiencyLevel}`}
+                          {!proficiencyLoading && !proficiencyError && !proficiencyLevel && 'No estimate yet.'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Based on your articles read, titles, and words learned.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 阅读统计 */}
                   <div>
-                <h2 className="text-xl font-semibold mb-4 text-slate-700 dark:text-slate-300">📚 Reading Stats</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                  {[
-                    { label: 'Articles Read', value: stats.total_articles, color: 'text-blue-600' },
-                    { label: 'Words Learned', value: stats.vocabulary_count, color: 'text-emerald-600' },
-                    { label: 'Minutes Active', value: stats.total_time_minutes, color: 'text-amber-600' },
-                    { label: 'Tests Taken', value: stats.total_reading_tests || 0, color: 'text-purple-600' },
-                    { label: 'Average Score', value: stats.avg_reading_score != null ? `${stats.avg_reading_score}%` : '-', color: 'text-pink-600' },
-                  ].map((stat, idx) => (
-                    <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                      <p className={`text-4xl font-black ${stat.color}`}>{stat.value}</p>
+                    <h2 className="text-xl font-semibold mb-4 text-slate-700 dark:text-slate-300">📚 Reading Stats</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                      {[
+                        { label: 'Articles Read', value: stats.total_articles, color: 'text-blue-600' },
+                        { label: 'Words Learned', value: stats.vocabulary_count, color: 'text-emerald-600' },
+                        { label: 'Minutes Active', value: stats.total_time_minutes, color: 'text-amber-600' },
+                        { label: 'Tests Taken', value: stats.total_reading_tests || 0, color: 'text-purple-600' },
+                        { label: 'Average Score', value: stats.avg_reading_score != null ? `${stats.avg_reading_score}%` : '-', color: 'text-pink-600' },
+                      ].map((stat, idx) => (
+                        <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                          <p className={`text-4xl font-black ${stat.color}`}>{stat.value}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
                   </div>
 
                   {/* 写作统计 */}
