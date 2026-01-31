@@ -4,6 +4,7 @@ Flask API服务
 import os
 import json
 import tempfile
+import base64
 import re
 import sqlite3
 import random
@@ -16,6 +17,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sqlalchemy.orm import sessionmaker
+from huggingface_hub import InferenceClient
 
 from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, WritingHistory, SpeakingHistory
 from recommender import ArticleRecommender
@@ -722,7 +724,7 @@ def get_article_analysis(article_id):
 
 @app.route('/api/translate', methods=['POST'])
 def translate_article_segment():
-    """Translate a text segment using Gemini 2.5 Flash."""
+    """Translate a text segment using Gemini 2.5 Flash with fallback APIs."""
     data = request.json or {}
     text = (data.get('text') or '').strip()
     target_language = data.get('target_language') or 'zh-CN'
@@ -731,6 +733,38 @@ def translate_article_segment():
         return jsonify({'error': 'Text is required'}), 400
 
     gemini_key = os.getenv('GEMINI_API_KEY')
+    translated = ""
+    gemini_error = None
+
+    if gemini_key:
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_key)
+
+        prompt = f"""Translate the following English text into {target_language}.
+Return only the translated text without additional commentary.
+
+Text:
+{text}"""
+        try:
+            model = genai.GenerativeModel(
+                model_name="models/gemini-2.5-flash",
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 1024,
+                }
+            )
+            response = model.generate_content(prompt)
+            translated = (response.text or '').strip()
+        except Exception as e:
+            gemini_error = str(e)
+
+    if translated:
+        return jsonify({"translation": translated, "provider": "gemini"})
+
+    fallback = translate_text(text, source_lang="en", target_lang=target_language)
+    if fallback:
+        return jsonify({"translation": fallback, "provider": "fallback"})
+
     if not gemini_key:
         return jsonify({
             "error": "GEMINI_API_KEY_NOT_CONFIGURED",
@@ -738,39 +772,121 @@ def translate_article_segment():
             "detail": "请运行 configure.py 配置 GEMINI_API_KEY 以启用翻译功能"
         }), 503
 
-    import google.generativeai as genai
-    genai.configure(api_key=gemini_key)
+    error_text = gemini_error or "Translation failed"
+    status = 429 if '429' in error_text or 'rate' in error_text.lower() else 502
+    return jsonify({
+        "error": "TRANSLATION_FAILED",
+        "message": "Translation failed",
+        "detail": error_text
+    }), status
 
-    prompt = f"""Translate the following English text into {target_language}.
-Return only the translated text without additional commentary.
+@app.route('/api/proficiency', methods=['POST'])
+def estimate_proficiency():
+    """Estimate CEFR proficiency using Qwen."""
+    data = request.json or {}
+    articles_read = data.get('articles_read', 0)
+    words_learned = data.get('words_learned', 0)
+    titles = data.get('article_titles', []) or []
+    titles_preview = ', '.join(titles[:10])
 
-Text:
-{text}"""
-    try:
-        model = genai.GenerativeModel(
-            model_name="models/gemini-2.5-flash",
-            generation_config={
-                "temperature": 0.2,
-                "max_output_tokens": 1024,
-            }
-        )
-        response = model.generate_content(prompt)
-        translated = (response.text or '').strip()
-        if not translated:
-            return jsonify({
-                "error": "EMPTY_RESPONSE",
-                "message": "❌ 翻译返回空内容",
-                "detail": "Gemini API返回了空响应"
-            }), 502
-        return jsonify({"translation": translated})
-    except Exception as e:
-        error_text = str(e)
-        status = 429 if '429' in error_text or 'rate' in error_text.lower() else 500
+    hf_token = os.environ.get("HF_TOKEN", "")
+
+    def heuristic_level() -> str:
+        if articles_read >= 100 or words_learned >= 2000:
+            return "C1"
+        if articles_read >= 60 or words_learned >= 1200:
+            return "B2"
+        if articles_read >= 30 or words_learned >= 600:
+            return "B1"
+        if articles_read >= 10 or words_learned >= 200:
+            return "A2"
+        return "A1"
+
+    prompt = f"""
+You are an English proficiency assessor. Estimate a rough CEFR level based on the metrics below.
+Return ONLY one label from: A1, A2, B1, B2, C1, C2.
+
+Articles read: {articles_read}
+Words learned: {words_learned}
+Article titles: {titles_preview}
+""".strip()
+
+    if not hf_token:
         return jsonify({
-            "error": "TRANSLATION_FAILED",
-            "message": "Translation failed",
-            "detail": error_text
-        }), status
+            "level": heuristic_level(),
+            "provider": "heuristic",
+            "message": "HuggingFace token is not configured for Qwen.",
+        })
+
+    try:
+        client = InferenceClient(model="Qwen/Qwen2.5-72B-Instruct", token=hf_token)
+        response = client.text_generation(
+            prompt,
+            max_new_tokens=20,
+            temperature=0.2,
+        )
+        match = re.search(r'\\b(A1|A2|B1|B2|C1|C2)\\b', response or '')
+        level = match.group(1) if match else (response or '').strip()
+        if level:
+            return jsonify({"level": level, "raw": response, "provider": "qwen"})
+        return jsonify({
+            "level": heuristic_level(),
+            "provider": "heuristic",
+            "message": "Qwen did not return a proficiency level."
+        })
+    except Exception as e:
+        detail = str(e)
+        return jsonify({
+            "level": heuristic_level(),
+            "provider": "heuristic",
+            "message": "Qwen failed; using heuristic estimate.",
+            "detail": detail
+        })
+
+@app.route('/api/article_image', methods=['POST'])
+def generate_article_image():
+    """Generate an article cover image using HuggingFace image models."""
+    data = request.json or {}
+    title = (data.get('title') or '').strip()
+    summary = (data.get('summary') or '').strip()
+    if not title:
+        return jsonify({'error': 'Title is required'}), 400
+
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token:
+        return jsonify({
+            "error": "HF_TOKEN_NOT_CONFIGURED",
+            "message": "HuggingFace token is not configured for image generation."
+        }), 503
+
+    prompt_parts = [title]
+    if summary:
+        prompt_parts.append(summary)
+    prompt = f"Cover illustration, clean editorial style. {'. '.join(prompt_parts)}"
+
+    models = [
+        "stabilityai/stable-diffusion-2-1"
+    ]
+
+    for model in models:
+        try:
+            client = InferenceClient(model=model, token=hf_token)
+            image = client.text_to_image(prompt)
+            buffer = tempfile.SpooledTemporaryFile()
+            image.save(buffer, format="PNG")
+            buffer.seek(0)
+            encoded = base64.b64encode(buffer.read()).decode("utf-8")
+            return jsonify({
+                "image": f"data:image/png;base64,{encoded}",
+                "provider": model
+            })
+        except Exception:
+            continue
+
+    return jsonify({
+        "error": "IMAGE_GENERATION_FAILED",
+        "message": "Unable to generate image at this time."
+    }), 502
 
 # ========== 推荐相关API ==========
 
