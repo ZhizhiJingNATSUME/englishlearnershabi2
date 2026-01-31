@@ -520,20 +520,20 @@ function App() {
                           />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-2xl font-bold text-slate-700 dark:text-slate-200">
+                          <span className="text-4xl font-bold text-slate-700 dark:text-slate-200">
                             {proficiencyLoading ? '...' : (proficiencyLevel || '—')}
                           </span>
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase text-slate-400">Estimated Level</p>
-                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                        <p className="text-base font-semibold uppercase text-slate-400">Estimated Level</p>
+                        <p className="text-lg text-slate-600 dark:text-slate-300">
                           {proficiencyLoading && 'Assessing with Qwen...'}
                           {!proficiencyLoading && proficiencyError && proficiencyError}
                           {!proficiencyLoading && !proficiencyError && proficiencyLevel && `Estimated CEFR: ${proficiencyLevel}`}
                           {!proficiencyLoading && !proficiencyError && !proficiencyLevel && 'No estimate yet.'}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm text-slate-500">
                           Based on your articles read, titles, and words learned.
                         </p>
                       </div>

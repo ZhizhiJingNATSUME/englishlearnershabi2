@@ -865,8 +865,7 @@ def generate_article_image():
     prompt = f"Cover illustration, clean editorial style. {'. '.join(prompt_parts)}"
 
     models = [
-        "Qwen/Qwen2.5-Image-Gen",
-        "stabilityai/sdxl-turbo"
+        "stabilityai/stable-diffusion-2-1"
     ]
 
     for model in models:
