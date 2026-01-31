@@ -829,33 +829,42 @@ def get_article_image(filename):
 def get_article_translation(article_id):
     """获取文章翻译"""
     target_lang = request.args.get('target_lang', default='zh-CN')
+    refresh = request.args.get('refresh', default='false').lower() in {'1', 'true', 'yes'}
     session = Session()
     try:
+        article = session.query(Article).filter_by(id=article_id).first()
+        if not article:
+            return jsonify({'error': 'Article not found'}), 404
+
         translation = session.query(ArticleTranslation).filter_by(
             article_id=article_id,
             target_language=target_lang
         ).first()
-        if translation:
+        if translation and not refresh:
+            original_paragraphs = split_article_paragraphs(article.content)
+            translated_paragraphs = split_article_paragraphs(translation.translation_text)
+            if len(original_paragraphs) > 1 and len(translated_paragraphs) < len(original_paragraphs):
+                refresh = True
+        if translation and not refresh:
             return jsonify({
                 'article_id': article_id,
                 'target_language': target_lang,
                 'translation': translation.translation_text
             })
 
-        article = session.query(Article).filter_by(id=article_id).first()
-        if not article:
-            return jsonify({'error': 'Article not found'}), 404
-
         translated_text = translate_article_text(article.content, target_lang)
         if not translated_text:
             return jsonify({'error': 'Translation failed'}), 500
 
-        translation = ArticleTranslation(
-            article_id=article_id,
-            target_language=target_lang,
-            translation_text=translated_text
-        )
-        session.add(translation)
+        if translation:
+            translation.translation_text = translated_text
+        else:
+            translation = ArticleTranslation(
+                article_id=article_id,
+                target_language=target_lang,
+                translation_text=translated_text
+            )
+            session.add(translation)
         session.commit()
 
         return jsonify({
