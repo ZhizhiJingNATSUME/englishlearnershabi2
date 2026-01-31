@@ -21,6 +21,33 @@ from models import init_db, get_session, User, Article, ReadingHistory, Vocabula
 from recommender import ArticleRecommender
 from question_generator import QuestionGenerator
 
+def load_env_file() -> None:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    env_path = os.path.join(repo_root, '.env')
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+        return
+    except ImportError:
+        pass
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, 'r', encoding='utf-8') as handle:
+            for line in handle:
+                cleaned = line.strip()
+                if not cleaned or cleaned.startswith('#') or '=' not in cleaned:
+                    continue
+                key, value = cleaned.split('=', 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except OSError:
+        return
+
+load_env_file()
+
 app = Flask(__name__)
 CORS(app)
 
@@ -1736,6 +1763,167 @@ def get_writing_history():
         return jsonify(history)
     finally:
         session.close()
+
+
+# ========== English Pilot API ==========
+
+def build_english_pilot_prompt(messages: list, scenario: dict, level: str) -> str:
+    category = scenario.get('category', 'daily')
+    title = scenario.get('title', 'General Conversation')
+    description = scenario.get('description', '')
+    context = scenario.get('context', '')
+    goal = scenario.get('goal', '')
+
+    transcript_lines = []
+    for message in messages:
+        role = message.get('role', 'user')
+        content = message.get('content', '')
+        if role == 'assistant':
+            transcript_lines.append(f"English Pilot: {content}")
+        else:
+            transcript_lines.append(f"Learner: {content}")
+
+    transcript = "\n".join(transcript_lines) if transcript_lines else "No previous messages yet."
+
+    return f"""You are English Pilot, an interactive conversational agent for English learners.
+Your mission is to help users practice English through scenario-based conversations.
+
+Identity & safety rules (must always follow):
+- Always identify yourself as "English Pilot" in every response.
+- Stay strictly within the role of an English learning assistant.
+- Refuse any request that is unrelated to language practice or the scenario.
+- If refusing, explain briefly and redirect to the learning task.
+
+Scenario configuration:
+- Category: {category}
+- Title: {title}
+- Description: {description}
+- User context: {context}
+- Learning goal: {goal}
+
+Language guidance:
+- Adapt language complexity to CEFR level {level}.
+- Keep responses concise, natural, and encouraging.
+- Provide corrections or gentle coaching when the learner makes mistakes.
+
+Conversation so far:
+{transcript}
+
+Respond with a JSON object only (no markdown):
+{{
+  "reply": "English Pilot: ...",
+  "refusal": false,
+  "tips": ["tip 1", "tip 2"],
+  "follow_up": "A short next prompt or question."
+}}
+
+If you must refuse, set "refusal" to true and still include a helpful follow-up question for English practice."""
+
+def call_english_pilot_llm(messages: list, scenario: dict, level: str) -> dict:
+    import google.generativeai as genai
+
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_key:
+        return {
+            "reply": "English Pilot: I can help you practice English conversations, but the AI service is not configured yet. Please ask the admin to set up the Gemini API key.",
+            "refusal": True,
+            "tips": ["Try a short reply like: 'Can we practice ordering food?'"],
+            "follow_up": "Would you like to practice a simple daily-life conversation?"
+        }
+
+    genai.configure(api_key=gemini_key)
+    prompt = build_english_pilot_prompt(messages, scenario, level)
+    debug_enabled = os.getenv('ENGLISH_PILOT_DEBUG', '').lower() in {'1', 'true', 'yes'}
+    model_override = os.getenv('ENGLISH_PILOT_MODEL', '').strip()
+    candidate_models = [
+        model_override,
+        "models/gemini-2.0-flash-exp",
+        "models/gemini-1.5-flash",
+        "models/gemini-1.5-pro",
+    ]
+    model_candidates = [model for model in candidate_models if model]
+
+    def normalize_reply(text: str) -> str:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return "English Pilot: Let's practice English together."
+        if cleaned.lower().startswith("english pilot"):
+            return cleaned
+        return f"English Pilot: {cleaned}"
+
+    def safe_response(payload: dict, fallback_text: str = "") -> dict:
+        if not isinstance(payload, dict):
+            payload = {}
+        reply = normalize_reply(payload.get("reply", fallback_text))
+        refusal = payload.get("refusal", False)
+        tips = payload.get("tips") if isinstance(payload.get("tips"), list) else []
+        follow_up = payload.get("follow_up", "What would you like to say next?")
+        return {
+            "reply": reply,
+            "refusal": refusal,
+            "tips": tips,
+            "follow_up": follow_up
+        }
+
+    last_error = None
+    for model_name in model_candidates:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config={
+                    "temperature": 0.6,
+                    "max_output_tokens": 1024,
+                }
+            )
+            response = model.generate_content(prompt)
+            response_text = response.text or ""
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    result = safe_response(json.loads(json_match.group(0)))
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ English Pilot JSON decode failed ({model_name}): {e}")
+                    result = safe_response({}, response_text)
+            else:
+                result = safe_response({}, response_text)
+            if debug_enabled:
+                result["debug"] = {"model": model_name}
+            return result
+        except Exception as e:
+            last_error = e
+            print(f"❌ English Pilot error ({model_name}): {type(e).__name__}: {e}")
+            continue
+
+    if debug_enabled:
+        return {
+            "reply": "English Pilot: I had trouble generating a response. Let's continue with a simple question.",
+            "refusal": False,
+            "tips": ["Keep your answer short and clear."],
+            "follow_up": "Can you introduce yourself in one sentence?",
+            "debug": {
+                "error": f"{type(last_error).__name__}: {last_error}" if last_error else "Unknown error",
+                "models_tried": model_candidates
+            }
+        }
+    return {
+        "reply": "English Pilot: I had trouble generating a response. Let's continue with a simple question.",
+        "refusal": False,
+        "tips": ["Keep your answer short and clear."],
+        "follow_up": "Can you introduce yourself in one sentence?"
+    }
+
+@app.route('/api/english_pilot/chat', methods=['POST'])
+def english_pilot_chat():
+    data = request.json or {}
+    messages = data.get('messages', [])
+    scenario = data.get('scenario', {})
+    level = data.get('level', 'B1')
+
+    if not isinstance(messages, list):
+        return jsonify({'error': 'Messages must be a list'}), 400
+
+    result = call_english_pilot_llm(messages, scenario, level)
+    return jsonify(result)
 
 
 # ========== Speaking Coach API ==========
