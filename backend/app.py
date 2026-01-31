@@ -27,8 +27,7 @@ except ImportError:
     load_dotenv = None
 
 if load_dotenv:
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    load_dotenv(os.path.join(repo_root, '.env'))
+    load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -1816,28 +1815,6 @@ def call_english_pilot_llm(messages: list, scenario: dict, level: str) -> dict:
     genai.configure(api_key=gemini_key)
     prompt = build_english_pilot_prompt(messages, scenario, level)
 
-    def normalize_reply(text: str) -> str:
-        cleaned = (text or "").strip()
-        if not cleaned:
-            return "English Pilot: Let's practice English together."
-        if cleaned.lower().startswith("english pilot"):
-            return cleaned
-        return f"English Pilot: {cleaned}"
-
-    def safe_response(payload: dict, fallback_text: str = "") -> dict:
-        if not isinstance(payload, dict):
-            payload = {}
-        reply = normalize_reply(payload.get("reply", fallback_text))
-        refusal = payload.get("refusal", False)
-        tips = payload.get("tips") if isinstance(payload.get("tips"), list) else []
-        follow_up = payload.get("follow_up", "What would you like to say next?")
-        return {
-            "reply": reply,
-            "refusal": refusal,
-            "tips": tips,
-            "follow_up": follow_up
-        }
-
     try:
         model = genai.GenerativeModel(
             model_name="models/gemini-2.0-flash-exp",
@@ -1850,11 +1827,13 @@ def call_english_pilot_llm(messages: list, scenario: dict, level: str) -> dict:
         response_text = response.text or ""
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
-            try:
-                return safe_response(json.loads(json_match.group(0)))
-            except json.JSONDecodeError as e:
-                print(f"⚠️ English Pilot JSON decode failed: {e}")
-        return safe_response({}, response_text)
+            return json.loads(json_match.group(0))
+        return {
+            "reply": response_text.strip() or "English Pilot: Let's practice English together.",
+            "refusal": False,
+            "tips": [],
+            "follow_up": "What would you like to say next?"
+        }
     except Exception as e:
         print(f"❌ English Pilot error: {type(e).__name__}: {e}")
         return {
