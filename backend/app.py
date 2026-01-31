@@ -56,6 +56,19 @@ english_pilot_diagnostics = {
     "last_response_preview": None,
 }
 
+article_translation_diagnostics = {
+    "last_error": None,
+    "last_response_preview": None,
+    "last_language": None,
+    "last_article_id": None,
+}
+
+article_image_diagnostics = {
+    "last_error": None,
+    "last_provider": None,
+    "last_article_id": None,
+}
+
 app = Flask(__name__)
 CORS(app)
 
@@ -173,45 +186,64 @@ Input paragraphs (JSON array):
 """
     response = model.generate_content(prompt)
     response_text = response.text or ""
-    json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-    if not json_match:
-        raise ValueError("Translation JSON not found")
-    return json.loads(json_match.group(0))
+    article_translation_diagnostics["last_response_preview"] = response_text[:500]
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+        if not json_match:
+            raise ValueError("Translation JSON not found")
+        return json.loads(json_match.group(0))
 
 def generate_article_image(title: str) -> Optional[str]:
-    try:
-        import google.generativeai as genai
-    except ImportError:
+    qwen_key = os.getenv('QWEN_API_KEY') or os.getenv('DASHSCOPE_API_KEY')
+    if not qwen_key:
+        article_image_diagnostics["last_error"] = "QWEN_API_KEY not configured"
         return None
-    gemini_key = os.getenv('GEMINI_API_KEY')
-    if not gemini_key:
-        return None
-    genai.configure(api_key=gemini_key)
     prompt = (
         "Create a high-quality, text-free illustration for a news article titled: "
         f"\"{title}\". The image should be visually relevant, clean, and suitable as a "
         "header image."
     )
+    payload = {
+        "model": "wanx-v1",
+        "input": {"prompt": prompt},
+        "parameters": {"size": "1024*768", "n": 1}
+    }
+    headers = {
+        "Authorization": f"Bearer {qwen_key}",
+        "Content-Type": "application/json"
+    }
     try:
-        response = genai.generate_images(
-            model="imagen-3.0-generate-002",
-            prompt=prompt
+        response = requests.post(
+            "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis",
+            headers=headers,
+            json=payload,
+            timeout=30
         )
-    except Exception:
+        if not response.ok:
+            article_image_diagnostics["last_error"] = f"Qwen image API error: {response.status_code}"
+            return None
+        data = response.json()
+        article_image_diagnostics["last_provider"] = "qwen"
+        image_url = None
+        if isinstance(data, dict):
+            output = data.get("output", {})
+            images = output.get("images") or output.get("results") or []
+            if images and isinstance(images, list):
+                image_url = images[0].get("url") or images[0].get("image_url")
+        if not image_url:
+            article_image_diagnostics["last_error"] = "Qwen image URL missing"
+            return None
+        image_response = requests.get(image_url, timeout=30)
+        if not image_response.ok:
+            article_image_diagnostics["last_error"] = f"Image fetch failed: {image_response.status_code}"
+            return None
+        encoded = base64.b64encode(image_response.content).decode("utf-8")
+        return f"data:image/png;base64,{encoded}"
+    except Exception as exc:
+        article_image_diagnostics["last_error"] = f"{type(exc).__name__}: {exc}"
         return None
-    image_bytes = None
-    if hasattr(response, "images") and response.images:
-        first = response.images[0]
-        if isinstance(first, bytes):
-            image_bytes = first
-        elif hasattr(first, "data"):
-            image_bytes = first.data
-        elif hasattr(first, "image_bytes"):
-            image_bytes = first.image_bytes
-    if not image_bytes:
-        return None
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
-    return f"data:image/png;base64,{encoded}"
 
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
@@ -770,6 +802,7 @@ def generate_article_image_endpoint(article_id):
         if article.image_url and not regenerate:
             return jsonify({'image_url': article.image_url, 'cached': True})
 
+        article_image_diagnostics["last_article_id"] = article_id
         image_url = generate_article_image(article.title)
         if not image_url:
             return jsonify({'error': 'IMAGE_GENERATION_FAILED'}), 502
@@ -789,6 +822,11 @@ def get_article_translation(article_id):
         article = session.query(Article).filter_by(id=article_id).first()
         if not article:
             return jsonify({'error': 'Article not found'}), 404
+        article_translation_diagnostics["last_article_id"] = article_id
+        article_translation_diagnostics["last_language"] = target_language
+        article_translation_diagnostics["last_error"] = None
+        article_translation_diagnostics["last_response_preview"] = None
+
         if not refresh:
             cached = session.query(ArticleTranslation).filter_by(
                 article_id=article_id,
@@ -840,9 +878,25 @@ def get_article_translation(article_id):
             'paragraphs': payload
         })
     except Exception as e:
+        article_translation_diagnostics["last_error"] = f"{type(e).__name__}: {e}"
         return jsonify({'error': 'TRANSLATION_FAILED', 'detail': str(e)}), 500
     finally:
         session.close()
+
+@app.route('/api/articles/diagnostics', methods=['GET'])
+def get_article_diagnostics():
+    """文章图像/翻译诊断信息"""
+    gemini_key = os.getenv('GEMINI_API_KEY', '')
+    qwen_key = os.getenv('QWEN_API_KEY') or os.getenv('DASHSCOPE_API_KEY') or ''
+    payload = {
+        "gemini_key_loaded": bool(gemini_key),
+        "gemini_key_length": len(gemini_key),
+        "qwen_key_loaded": bool(qwen_key),
+        "qwen_key_length": len(qwen_key),
+        "translation": article_translation_diagnostics,
+        "image": article_image_diagnostics,
+    }
+    return jsonify(payload)
 
 @app.route('/api/articles/<int:article_id>/analysis', methods=['GET'])
 def get_article_analysis(article_id):
