@@ -117,15 +117,13 @@ def build_image_prompt(article: Article) -> str:
     """构建用于生成文章配图的提示词"""
     title = (article.title or "").strip()
     category = (article.category or "").strip()
-    summary = (article.content or "").strip().replace("\n", " ")
-    summary = " ".join(summary.split()[:24])
-    parts = [title, f"Category: {category}" if category else "", summary]
+    parts = [title, f"Category: {category}" if category else ""]
     prompt = " ".join([p for p in parts if p]).strip()
     if not prompt:
         prompt = "English learning article illustration"
     return (
         f"{prompt}. Editorial illustration about the topic, no robots, no text, "
-        "no watermark, no logo, no QR code, high quality, vivid colors, clean composition"
+        "high quality, vivid colors, clean composition"
     )
 
 def generate_image_url(article: Article) -> str:
@@ -134,11 +132,7 @@ def generate_image_url(article: Article) -> str:
     encoded = quote(prompt)
     seed_source = prompt.encode("utf-8")
     seed = int(hashlib.sha256(seed_source).hexdigest()[:8], 16)
-    model = os.getenv("POLLINATIONS_MODEL", "turbo")
-    return (
-        "https://image.pollinations.ai/prompt/"
-        f"{encoded}?width=1200&height=720&seed={seed}&nologo=true&model={model}"
-    )
+    return f"https://image.pollinations.ai/prompt/{encoded}?width=1200&height=720&seed={seed}&nologo=true"
 
 def generate_qwen_image(prompt: str) -> bytes:
     """使用 Qwen 图像模型生成图片数据"""
@@ -231,25 +225,7 @@ def split_article_paragraphs(text: str) -> list[str]:
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
     if len(paragraphs) <= 1:
         paragraphs = [p.strip() for p in re.split(r'\n+', text) if p.strip()]
-    if len(paragraphs) > 1:
-        return paragraphs
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text.strip()) if s.strip()]
-    if len(sentences) <= 1:
-        return [text.strip()] if text.strip() else []
-    grouped = []
-    current = []
-    word_count = 0
-    for sentence in sentences:
-        sentence_words = sentence.split()
-        if current and (len(current) >= 3 or word_count + len(sentence_words) > 120):
-            grouped.append(" ".join(current).strip())
-            current = []
-            word_count = 0
-        current.append(sentence)
-        word_count += len(sentence_words)
-    if current:
-        grouped.append(" ".join(current).strip())
-    return grouped
+    return paragraphs or [text.strip()]
 
 def qwen_translate_text(text: str, target_lang: str) -> str:
     """使用 Qwen 模型翻译文本"""
