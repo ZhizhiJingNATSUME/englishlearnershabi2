@@ -219,4 +219,27 @@ export interface SpeakingSubmission {
     created_at: string;
 }
 
-export type ViewType = 'discover' | 'library' | 'history' | 'vocabulary' | 'stats' | 'test' | 'writing' | 'speaking' | 'vocabulary_test';
+export interface EnglishPilotScenario {
+    category: 'daily' | 'academic' | 'professional';
+    title: string;
+    description: string;
+    context?: string;
+    goal?: string;
+}
+
+export interface EnglishPilotMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    tips?: string[];
+    follow_up?: string;
+    refusal?: boolean;
+}
+
+export interface EnglishPilotResponse {
+    reply: string;
+    refusal?: boolean;
+    tips?: string[];
+    follow_up?: string;
+}
+
+export type ViewType = 'discover' | 'library' | 'history' | 'vocabulary' | 'stats' | 'test' | 'writing' | 'speaking' | 'vocabulary_test' | 'english_pilot';
