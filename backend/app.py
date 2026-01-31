@@ -11,6 +11,7 @@ import asyncio
 import csv
 import requests
 import base64
+import time
 from collections import Counter
 from typing import Optional
 from datetime import datetime
@@ -222,7 +223,7 @@ def generate_article_image(title: str) -> Optional[str]:
             timeout=30
         )
         if not response.ok:
-            article_image_diagnostics["last_error"] = f"Qwen image API error: {response.status_code}"
+            article_image_diagnostics["last_error"] = f"Qwen image API error: {response.status_code} {response.text}"
             return None
         data = response.json()
         article_image_diagnostics["last_provider"] = "qwen"
@@ -232,6 +233,9 @@ def generate_article_image(title: str) -> Optional[str]:
             images = output.get("images") or output.get("results") or []
             if images and isinstance(images, list):
                 image_url = images[0].get("url") or images[0].get("image_url")
+            task_id = output.get("task_id")
+            if not image_url and task_id:
+                image_url = poll_qwen_image(task_id, headers)
         if not image_url:
             article_image_diagnostics["last_error"] = "Qwen image URL missing"
             return None
@@ -244,6 +248,31 @@ def generate_article_image(title: str) -> Optional[str]:
     except Exception as exc:
         article_image_diagnostics["last_error"] = f"{type(exc).__name__}: {exc}"
         return None
+
+def poll_qwen_image(task_id: str, headers: dict) -> Optional[str]:
+    if not task_id:
+        return None
+    for _ in range(6):
+        try:
+            response = requests.get(
+                f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}",
+                headers=headers,
+                timeout=30
+            )
+            if not response.ok:
+                article_image_diagnostics["last_error"] = f"Qwen task error: {response.status_code} {response.text}"
+                return None
+            data = response.json()
+            output = data.get("output", {})
+            images = output.get("images") or output.get("results") or []
+            if images and isinstance(images, list):
+                return images[0].get("url") or images[0].get("image_url")
+            time.sleep(2)
+        except Exception as exc:
+            article_image_diagnostics["last_error"] = f"{type(exc).__name__}: {exc}"
+            return None
+    article_image_diagnostics["last_error"] = "Qwen image generation timed out"
+    return None
 
 def fetch_dictionary_entry(word: str) -> dict:
     """获取英文释义和例句"""
