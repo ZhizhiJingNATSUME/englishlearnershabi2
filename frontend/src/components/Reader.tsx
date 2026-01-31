@@ -377,6 +377,17 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                     </div>
 
                     <div className="flex items-center space-x-2">
+                        <button
+                            onClick={() => void handleTranslateToggle()}
+                            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                                isTranslationOpen
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-white text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-200'
+                            }`}
+                        >
+                            <Languages size={14} />
+                            Translate
+                        </button>
                         <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
                             <Settings size={20} />
                         </button>
@@ -422,6 +433,88 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                 </div>
                             )}
                         </div>
+                        {isTranslationOpen && (
+                            <div className="mt-10 space-y-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                        Progressive Translation
+                                    </h3>
+                                    {translationProgress.total > 0 && (
+                                        <span className="text-xs text-slate-500">
+                                            Translating segment {Math.min(translationProgress.current, translationProgress.total)} of {translationProgress.total}
+                                        </span>
+                                    )}
+                                </div>
+                                {translationError && (
+                                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                                        {translationError}
+                                    </div>
+                                )}
+                                <div className="space-y-3">
+                                    {translationSegments.map((segment, index) => (
+                                        <div key={segment.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[11px] uppercase text-slate-400">Segment {index + 1}</span>
+                                                <div className="flex items-center gap-2 text-[11px] font-semibold">
+                                                    {segment.status === 'loading' && (
+                                                        <span className="flex items-center gap-1 text-blue-500">
+                                                            <Loader2 size={12} className="animate-spin" />
+                                                            Translating...
+                                                        </span>
+                                                    )}
+                                                    {segment.status === 'pending' && (
+                                                        <span className="text-slate-400">Pending</span>
+                                                    )}
+                                                    {segment.status === 'done' && (
+                                                        <span className="text-emerald-600">Ready</span>
+                                                    )}
+                                                    {segment.status === 'error' && (
+                                                        <span className="text-red-500">Error</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                                <div className="rounded-xl bg-slate-50 p-4 text-xs text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
+                                                    {segment.original}
+                                                </div>
+                                                <div className="rounded-xl bg-blue-50 p-4 text-xs text-slate-700 dark:bg-blue-900/30 dark:text-slate-200">
+                                                    {segment.status === 'loading' && (
+                                                        <span className="text-blue-500">Loading translation...</span>
+                                                    )}
+                                                    {segment.status === 'pending' && (
+                                                        <span className="text-slate-400">Waiting to translate</span>
+                                                    )}
+                                                    {segment.status === 'error' && (
+                                                        <div className="space-y-2">
+                                                            <p className="text-red-500 text-xs">{segment.error || 'Translation failed.'}</p>
+                                                            <button
+                                                                onClick={() => void retrySegment(index)}
+                                                                className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-1 text-[11px] font-semibold text-white"
+                                                            >
+                                                                <RotateCcw size={12} />
+                                                                Retry
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {segment.status === 'done' && segment.translation}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {translationSegments.length === 0 && (
+                                        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700">
+                                            No translation yet. Tap “Translate” to begin.
+                                        </div>
+                                    )}
+                                </div>
+                                {isTranslating && (
+                                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Translating segments sequentially...
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -434,17 +527,6 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             <span>Analysis</span>
                         </h2>
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => void handleTranslateToggle()}
-                                className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                    isTranslationOpen
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-white text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-200'
-                                }`}
-                            >
-                                <Languages size={14} />
-                                Translate
-                            </button>
                             {selectedHighlight && (
                                 <button onClick={() => setSelectedHighlight(null)} className="md:hidden p-1">
                                     <X size={18} />
@@ -519,98 +601,12 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                     })()
                                 )}
                             </div>
-                        ) : !isTranslationOpen ? (
+                        ) : (
                             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40">
                                 <BookOpen size={48} className="text-slate-300" />
                                 <p className="text-sm text-slate-500 px-8">
                                     Click on the highlighted text in the article to see detailed analysis, vocabulary and grammar points.
                                 </p>
-                            </div>
-                        ) : (
-                            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700">
-                                Translation is enabled. Select highlights above to see detailed analysis.
-                            </div>
-                        )}
-                        {isTranslationOpen && (
-                            <div className="mt-8 space-y-4">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                                        Progressive Translation
-                                    </h3>
-                                    {translationProgress.total > 0 && (
-                                        <span className="text-xs text-slate-500">
-                                            Translating segment {Math.min(translationProgress.current, translationProgress.total)} of {translationProgress.total}
-                                        </span>
-                                    )}
-                                </div>
-                                {translationError && (
-                                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-                                        {translationError}
-                                    </div>
-                                )}
-                                <div className="space-y-3">
-                                    {translationSegments.map((segment, index) => (
-                                        <div key={segment.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[11px] uppercase text-slate-400">Segment {index + 1}</span>
-                                                <div className="flex items-center gap-2 text-[11px] font-semibold">
-                                                    {segment.status === 'loading' && (
-                                                        <span className="flex items-center gap-1 text-blue-500">
-                                                            <Loader2 size={12} className="animate-spin" />
-                                                            Translating...
-                                                        </span>
-                                                    )}
-                                                    {segment.status === 'pending' && (
-                                                        <span className="text-slate-400">Pending</span>
-                                                    )}
-                                                    {segment.status === 'done' && (
-                                                        <span className="text-emerald-600">Ready</span>
-                                                    )}
-                                                    {segment.status === 'error' && (
-                                                        <span className="text-red-500">Error</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                                <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
-                                                    {segment.original}
-                                                </div>
-                                                <div className="rounded-xl bg-blue-50 p-3 text-xs text-slate-700 dark:bg-blue-900/30 dark:text-slate-200">
-                                                    {segment.status === 'loading' && (
-                                                        <span className="text-blue-500">Loading translation...</span>
-                                                    )}
-                                                    {segment.status === 'pending' && (
-                                                        <span className="text-slate-400">Waiting to translate</span>
-                                                    )}
-                                                    {segment.status === 'error' && (
-                                                        <div className="space-y-2">
-                                                            <p className="text-red-500 text-xs">{segment.error || 'Translation failed.'}</p>
-                                                            <button
-                                                                onClick={() => void retrySegment(index)}
-                                                                className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-1 text-[11px] font-semibold text-white"
-                                                            >
-                                                                <RotateCcw size={12} />
-                                                                Retry
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                    {segment.status === 'done' && segment.translation}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {translationSegments.length === 0 && (
-                                        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700">
-                                            No translation yet. Tap “Translate” to begin.
-                                        </div>
-                                    )}
-                                </div>
-                                {isTranslating && (
-                                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                                        <Loader2 size={14} className="animate-spin" />
-                                        Translating segments sequentially...
-                                    </div>
-                                )}
                             </div>
                         )}
                     </div>
