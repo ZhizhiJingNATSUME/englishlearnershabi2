@@ -4,6 +4,7 @@ Flask API服务
 import os
 import json
 import tempfile
+import base64
 import re
 import sqlite3
 import random
@@ -841,6 +842,52 @@ Article titles: {titles_preview}
             "message": "Qwen failed; using heuristic estimate.",
             "detail": detail
         })
+
+@app.route('/api/article_image', methods=['POST'])
+def generate_article_image():
+    """Generate an article cover image using HuggingFace image models."""
+    data = request.json or {}
+    title = (data.get('title') or '').strip()
+    summary = (data.get('summary') or '').strip()
+    if not title:
+        return jsonify({'error': 'Title is required'}), 400
+
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token:
+        return jsonify({
+            "error": "HF_TOKEN_NOT_CONFIGURED",
+            "message": "HuggingFace token is not configured for image generation."
+        }), 503
+
+    prompt_parts = [title]
+    if summary:
+        prompt_parts.append(summary)
+    prompt = f"Cover illustration, clean editorial style. {'. '.join(prompt_parts)}"
+
+    models = [
+        "Qwen/Qwen2.5-Image-Gen",
+        "stabilityai/sdxl-turbo"
+    ]
+
+    for model in models:
+        try:
+            client = InferenceClient(model=model, token=hf_token)
+            image = client.text_to_image(prompt)
+            buffer = tempfile.SpooledTemporaryFile()
+            image.save(buffer, format="PNG")
+            buffer.seek(0)
+            encoded = base64.b64encode(buffer.read()).decode("utf-8")
+            return jsonify({
+                "image": f"data:image/png;base64,{encoded}",
+                "provider": model
+            })
+        except Exception:
+            continue
+
+    return jsonify({
+        "error": "IMAGE_GENERATION_FAILED",
+        "message": "Unable to generate image at this time."
+    }), 502
 
 # ========== 推荐相关API ==========
 

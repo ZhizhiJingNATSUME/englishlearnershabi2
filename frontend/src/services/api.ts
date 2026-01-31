@@ -231,3 +231,15 @@ export const getProficiencyEstimate = async (data: {
     });
     return handleResponse(response);
 };
+
+export const getArticleImage = async (data: {
+    title: string;
+    summary?: string;
+}): Promise<{ image: string; provider?: string }> => {
+    const response = await fetch(`${API_BASE}/article_image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+};
