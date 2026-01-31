@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Sparkles, Send, ShieldCheck, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Sparkles, Send, ShieldCheck, Loader2, Mic, Square } from 'lucide-react';
 import type { EnglishPilotMessage, EnglishPilotScenario, User } from '../types';
-import { chatEnglishPilot } from '../services/api';
+import { chatEnglishPilot, transcribeEnglishPilotAudio } from '../services/api';
 
 interface EnglishPilotProps {
   user: User;
@@ -81,7 +81,23 @@ export default function EnglishPilot({ user }: EnglishPilotProps) {
   const [messages, setMessages] = useState<EnglishPilotMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [voiceDraft, setVoiceDraft] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState('');
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const mimeTypeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!audioUrl) return;
+    return () => {
+      URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
 
   useEffect(() => {
     const nextScenario = scenarioCatalog[category][0];
@@ -141,6 +157,86 @@ export default function EnglishPilot({ user }: EnglishPilotProps) {
     await sendMessage(nextMessages);
   };
 
+  const startRecording = async () => {
+    try {
+      if (typeof MediaRecorder === 'undefined') {
+        setError('This browser does not support audio recording. Please try another browser.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ];
+      const supportedType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      const mediaRecorder = supportedType
+        ? new MediaRecorder(stream, { mimeType: supportedType })
+        : new MediaRecorder(stream);
+      mimeTypeRef.current = supportedType ?? null;
+      chunksRef.current = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+      mediaRecorder.onstop = () => {
+        const blobType = chunksRef.current[0]?.type || mimeTypeRef.current || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: blobType });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        setVoiceDraft('');
+        stream.getTracks().forEach(track => track.stop());
+      };
+      mediaRecorder.start();
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Microphone error:', err);
+      setError('Unable to access microphone. Please check browser permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleVoiceSubmit = async () => {
+    if (!audioBlob) return;
+    setIsTranscribing(true);
+    setError('');
+    try {
+      const { transcription } = await transcribeEnglishPilotAudio(audioBlob);
+      if (!transcription || transcription.startsWith('[')) {
+        setError('Unable to transcribe audio. Please try again.');
+        return;
+      }
+      setVoiceDraft(transcription.trim());
+    } catch (err) {
+      console.error('STT error:', err);
+      setError('Unable to transcribe audio. Please check the backend.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleVoiceSend = async () => {
+    if (!voiceDraft.trim()) {
+      setError('Please transcribe your recording before sending.');
+      return;
+    }
+    const nextMessages = [...messages, { role: 'user', content: voiceDraft.trim() }];
+    setMessages(nextMessages);
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setVoiceDraft('');
+    await sendMessage(nextMessages);
+  };
+
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -159,13 +255,26 @@ export default function EnglishPilot({ user }: EnglishPilotProps) {
             Configure the situation, set your goal, and start chatting.
           </p>
         </div>
-        <button
-          onClick={handleStart}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-white font-semibold shadow-lg transition hover:from-indigo-700 hover:to-purple-700"
-        >
-          <Sparkles size={18} />
-          Start Scenario
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => setIsVoiceMode((prev) => !prev)}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+              isVoiceMode
+                ? 'bg-emerald-600 text-white shadow-lg hover:bg-emerald-700'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200'
+            }`}
+          >
+            <Mic size={16} />
+            {isVoiceMode ? 'Voice Mode' : 'Text Mode'}
+          </button>
+          <button
+            onClick={handleStart}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-white font-semibold shadow-lg transition hover:from-indigo-700 hover:to-purple-700"
+          >
+            <Sparkles size={18} />
+            Start Scenario
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -302,28 +411,74 @@ export default function EnglishPilot({ user }: EnglishPilotProps) {
             )}
           </div>
 
-          <div className="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSubmit();
-                }
-              }}
-              placeholder="Type your reply here..."
-              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-800"
-            />
-            <button
-              onClick={() => void handleSubmit()}
-              disabled={isLoading}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-700 disabled:opacity-60"
-            >
-              <Send size={16} />
-              Send
-            </button>
-          </div>
+          {!isVoiceMode && (
+            <div className="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    void handleSubmit();
+                  }
+                }}
+                placeholder="Type your reply here..."
+                className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-800"
+              />
+              <button
+                onClick={() => void handleSubmit()}
+                disabled={isLoading}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-700 disabled:opacity-60"
+              >
+                <Send size={16} />
+                Send
+              </button>
+            </div>
+          )}
+          {isVoiceMode && (
+            <div className="mt-4 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg transition ${
+                    isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {isRecording ? <Square size={16} /> : <Mic size={16} />}
+                  {isRecording ? 'Stop Recording' : 'Start Recording'}
+                </button>
+                {audioBlob && <span className="text-xs text-slate-500">Recording ready.</span>}
+              </div>
+              {audioUrl && (
+                <audio controls src={audioUrl} className="w-full" />
+              )}
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                <button
+                  onClick={() => void handleVoiceSubmit()}
+                  disabled={!audioBlob || isTranscribing}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-300 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  {isTranscribing ? <Loader2 className="animate-spin" size={16} /> : <Mic size={16} />}
+                  {isTranscribing ? 'Transcribing...' : 'Transcribe Recording'}
+                </button>
+                <button
+                  onClick={() => void handleVoiceSend()}
+                  disabled={!voiceDraft || isLoading}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  <Send size={16} />
+                  Send Reply
+                </button>
+              </div>
+              <textarea
+                value={voiceDraft}
+                onChange={(event) => setVoiceDraft(event.target.value)}
+                placeholder="Transcription will appear here. You can edit before sending."
+                rows={3}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

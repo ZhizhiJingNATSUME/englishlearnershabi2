@@ -184,3 +184,17 @@ export const chatEnglishPilot = async (data: {
         body: JSON.stringify(data),
     }));
 };
+
+export const transcribeEnglishPilotAudio = async (audio: Blob): Promise<{ transcription: string }> => {
+    const extension = audio.type.includes('mp4')
+        ? 'mp4'
+        : audio.type.includes('ogg')
+            ? 'ogg'
+            : 'webm';
+    const formData = new FormData();
+    formData.append('audio', audio, `english-pilot.${extension}`);
+    return handleResponse(await fetch(`${API_BASE}/english_pilot/stt`, {
+        method: 'POST',
+        body: formData,
+    }));
+};
