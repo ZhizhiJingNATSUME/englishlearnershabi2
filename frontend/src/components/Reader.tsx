@@ -349,6 +349,22 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
         }
     };
 
+    const handleRefreshTranslation = async () => {
+        if (!article.content) return;
+        translationRunRef.current = 0;
+        setIsTranslating(false);
+        setTranslationError('');
+        const segments = buildTranslationSegments(article.content).map((segment, index) => ({
+            id: `${article.id}-${index}`,
+            original: segment,
+            status: 'pending' as const,
+        }));
+        setTranslationSegments(segments);
+        persistTranslations(segments);
+        setIsTranslationOpen(true);
+        await runTranslations(segments);
+    };
+
     const retrySegment = async (index: number) => {
         const segment = translationSegments[index];
         if (!segment) return;
@@ -418,6 +434,15 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             <Languages size={14} />
                             Translate
                         </button>
+                        {isTranslationOpen && (
+                            <button
+                                onClick={() => void handleRefreshTranslation()}
+                                className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                            >
+                                <RotateCcw size={14} />
+                                Refresh
+                            </button>
+                        )}
                         <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
                             <Settings size={20} />
                         </button>

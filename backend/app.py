@@ -16,6 +16,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sqlalchemy.orm import sessionmaker
+from huggingface_hub import InferenceClient
 
 from models import init_db, get_session, User, Article, ReadingHistory, VocabularyItem, ArticleAnalysis, WritingHistory, SpeakingHistory
 from recommender import ArticleRecommender
@@ -777,6 +778,53 @@ Text:
         "message": "Translation failed",
         "detail": error_text
     }), status
+
+@app.route('/api/proficiency', methods=['POST'])
+def estimate_proficiency():
+    """Estimate CEFR proficiency using Qwen."""
+    data = request.json or {}
+    articles_read = data.get('articles_read', 0)
+    words_learned = data.get('words_learned', 0)
+    titles = data.get('article_titles', []) or []
+    titles_preview = ', '.join(titles[:10])
+
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token:
+        return jsonify({
+            "error": "HF_TOKEN_NOT_CONFIGURED",
+            "message": "HuggingFace token is not configured for Qwen.",
+        }), 503
+
+    prompt = f"""
+You are an English proficiency assessor. Estimate a rough CEFR level based on the metrics below.
+Return ONLY one label from: A1, A2, B1, B2, C1, C2.
+
+Articles read: {articles_read}
+Words learned: {words_learned}
+Article titles: {titles_preview}
+""".strip()
+
+    try:
+        client = InferenceClient(model="Qwen/Qwen2.5-72B-Instruct", token=hf_token)
+        response = client.text_generation(
+            prompt,
+            max_new_tokens=20,
+            temperature=0.2,
+        )
+        match = re.search(r'\\b(A1|A2|B1|B2|C1|C2)\\b', response or '')
+        level = match.group(1) if match else (response or '').strip()
+        if not level:
+            return jsonify({
+                "error": "EMPTY_RESPONSE",
+                "message": "Qwen did not return a proficiency level."
+            }), 502
+        return jsonify({"level": level, "raw": response})
+    except Exception as e:
+        return jsonify({
+            "error": "PROFICIENCY_FAILED",
+            "message": "Failed to estimate proficiency.",
+            "detail": str(e)
+        }), 500
 
 # ========== 推荐相关API ==========
 

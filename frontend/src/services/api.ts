@@ -218,3 +218,24 @@ export const translateArticleSegment = async (data: {
     }
     return response.json();
 };
+
+export const getProficiencyEstimate = async (data: {
+    articles_read: number;
+    words_learned: number;
+    article_titles: string[];
+}): Promise<{ level: string; raw?: string }> => {
+    return handleResponse(await fetch(`${API_BASE}/proficiency`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Network response was not ok' }));
+        const message = error.error || error.message || 'API request failed';
+        const err = new Error(message) as Error & { status?: number; detail?: string };
+        err.status = response.status;
+        err.detail = error.detail;
+        throw err;
+    }
+    return response.json();
+};
