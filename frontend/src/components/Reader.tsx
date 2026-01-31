@@ -67,6 +67,25 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
         return isWord ? `\\b${escaped}\\b` : escaped;
     };
 
+    const splitParagraphs = (text?: string) => {
+        if (!text) return [];
+        let paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+        if (paragraphs.length <= 1) {
+            paragraphs = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
+        }
+        return paragraphs;
+    };
+
+    const paragraphPairs = useMemo(() => {
+        const originals = splitParagraphs(article.content);
+        const translations = splitParagraphs(translation);
+        const count = Math.max(originals.length, translations.length);
+        return Array.from({ length: count }, (_, idx) => ({
+            original: originals[idx] || '',
+            translation: translations[idx] || ''
+        }));
+    }, [article.content, translation]);
+
     // Highlighting Logic
     const segments = useMemo(() => {
         if (!analysis || mode !== 'learning' || !article.content) {
@@ -303,11 +322,24 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                         <p className="text-sm text-red-500">{translationError}</p>
                                     )}
                                     {!translationLoading && !translationError && translation && (
-                                        translation.split('\n\n').map((paragraph, idx) => (
-                                            <p key={idx} className="leading-relaxed">
-                                                {paragraph}
-                                            </p>
-                                        ))
+                                        <div className="space-y-6">
+                                            {paragraphPairs.map((pair, idx) => (
+                                                <div key={idx} className="grid gap-4 md:grid-cols-2">
+                                                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4 shadow-sm">
+                                                        <p className="text-sm font-semibold text-slate-500 mb-2">Original</p>
+                                                        <p className="leading-relaxed text-slate-800 dark:text-slate-100">
+                                                            {pair.original}
+                                                        </p>
+                                                    </div>
+                                                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4 shadow-sm">
+                                                        <p className="text-sm font-semibold text-slate-500 mb-2">Translation</p>
+                                                        <p className="leading-relaxed text-slate-700 dark:text-slate-200">
+                                                            {pair.translation || '—'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                     {!translationLoading && !translationError && !translation && (
                                         <p className="text-sm text-slate-500">No translation available yet.</p>
