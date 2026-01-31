@@ -21,6 +21,14 @@ from models import init_db, get_session, User, Article, ReadingHistory, Vocabula
 from recommender import ArticleRecommender
 from question_generator import QuestionGenerator
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv()
+
 app = Flask(__name__)
 CORS(app)
 
@@ -1736,6 +1744,117 @@ def get_writing_history():
         return jsonify(history)
     finally:
         session.close()
+
+
+# ========== English Pilot API ==========
+
+def build_english_pilot_prompt(messages: list, scenario: dict, level: str) -> str:
+    category = scenario.get('category', 'daily')
+    title = scenario.get('title', 'General Conversation')
+    description = scenario.get('description', '')
+    context = scenario.get('context', '')
+    goal = scenario.get('goal', '')
+
+    transcript_lines = []
+    for message in messages:
+        role = message.get('role', 'user')
+        content = message.get('content', '')
+        if role == 'assistant':
+            transcript_lines.append(f"English Pilot: {content}")
+        else:
+            transcript_lines.append(f"Learner: {content}")
+
+    transcript = "\n".join(transcript_lines) if transcript_lines else "No previous messages yet."
+
+    return f"""You are English Pilot, an interactive conversational agent for English learners.
+Your mission is to help users practice English through scenario-based conversations.
+
+Identity & safety rules (must always follow):
+- Always identify yourself as "English Pilot" in every response.
+- Stay strictly within the role of an English learning assistant.
+- Refuse any request that is unrelated to language practice or the scenario.
+- If refusing, explain briefly and redirect to the learning task.
+
+Scenario configuration:
+- Category: {category}
+- Title: {title}
+- Description: {description}
+- User context: {context}
+- Learning goal: {goal}
+
+Language guidance:
+- Adapt language complexity to CEFR level {level}.
+- Keep responses concise, natural, and encouraging.
+- Provide corrections or gentle coaching when the learner makes mistakes.
+
+Conversation so far:
+{transcript}
+
+Respond with a JSON object only (no markdown):
+{{
+  "reply": "English Pilot: ...",
+  "refusal": false,
+  "tips": ["tip 1", "tip 2"],
+  "follow_up": "A short next prompt or question."
+}}
+
+If you must refuse, set "refusal" to true and still include a helpful follow-up question for English practice."""
+
+def call_english_pilot_llm(messages: list, scenario: dict, level: str) -> dict:
+    import google.generativeai as genai
+
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_key:
+        return {
+            "reply": "English Pilot: I can help you practice English conversations, but the AI service is not configured yet. Please ask the admin to set up the Gemini API key.",
+            "refusal": True,
+            "tips": ["Try a short reply like: 'Can we practice ordering food?'"],
+            "follow_up": "Would you like to practice a simple daily-life conversation?"
+        }
+
+    genai.configure(api_key=gemini_key)
+    prompt = build_english_pilot_prompt(messages, scenario, level)
+
+    try:
+        model = genai.GenerativeModel(
+            model_name="models/gemini-2.0-flash-exp",
+            generation_config={
+                "temperature": 0.6,
+                "max_output_tokens": 1024,
+            }
+        )
+        response = model.generate_content(prompt)
+        response_text = response.text or ""
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(0))
+        return {
+            "reply": response_text.strip() or "English Pilot: Let's practice English together.",
+            "refusal": False,
+            "tips": [],
+            "follow_up": "What would you like to say next?"
+        }
+    except Exception as e:
+        print(f"❌ English Pilot error: {type(e).__name__}: {e}")
+        return {
+            "reply": "English Pilot: I had trouble generating a response. Let's continue with a simple question.",
+            "refusal": False,
+            "tips": ["Keep your answer short and clear."],
+            "follow_up": "Can you introduce yourself in one sentence?"
+        }
+
+@app.route('/api/english_pilot/chat', methods=['POST'])
+def english_pilot_chat():
+    data = request.json or {}
+    messages = data.get('messages', [])
+    scenario = data.get('scenario', {})
+    level = data.get('level', 'B1')
+
+    if not isinstance(messages, list):
+        return jsonify({'error': 'Messages must be a list'}), 400
+
+    result = call_english_pilot_llm(messages, scenario, level)
+    return jsonify(result)
 
 
 # ========== Speaking Coach API ==========

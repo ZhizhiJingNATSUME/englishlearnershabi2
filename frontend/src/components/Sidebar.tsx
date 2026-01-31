@@ -11,7 +11,8 @@ import {
     FileText,
     PenTool,
     Mic,
-    BookOpenCheck
+    BookOpenCheck,
+    MessageSquare
 } from 'lucide-react';
 import type { ViewType, User } from '../types';
 
@@ -36,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, user, on
         { id: 'vocabulary_test', label: 'Vocabulary Test', icon: <BookOpenCheck size={20} /> },
         { id: 'writing', label: 'Writing Coach', icon: <PenTool size={20} /> },
         { id: 'speaking', label: 'Speaking Coach', icon: <Mic size={20} /> },
+        { id: 'english_pilot', label: 'English Pilot', icon: <MessageSquare size={20} /> },
     ];
 
     return (
