@@ -265,6 +265,8 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
         });
     };
 
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     const runTranslations = async (segments: TranslationSegment[]) => {
         if (!segments.length) return;
         const runId = Date.now();
@@ -282,15 +284,26 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
             updateTranslationSegment(index, { status: 'loading', error: undefined });
             setTranslationProgress({ current: index + 1, total: segments.length });
             try {
+                if (index > 0) {
+                    await wait(350);
+                }
                 const response = await translateArticleSegment({ text: segment.original, target_language: 'zh-CN' });
                 if (translationRunRef.current !== runId) return;
                 updateTranslationSegment(index, { translation: response.translation, status: 'done' });
             } catch (err) {
                 if (translationRunRef.current !== runId) return;
+                const error = err as Error & { status?: number; detail?: string };
+                const isRateLimited = error.status === 429 || /rate|429/i.test(error.message || '') || /rate|429/i.test(error.detail || '');
                 updateTranslationSegment(index, {
                     status: 'error',
-                    error: err instanceof Error ? err.message : 'Translation failed',
+                    error: error.message || 'Translation failed',
                 });
+                if (isRateLimited) {
+                    setTranslationError('Translation is rate-limited by the backend (HTTP 429). Please wait a moment and retry.');
+                    setIsTranslating(false);
+                    translationRunRef.current = 0;
+                    return;
+                }
                 setTranslationError('Some segments failed to translate. You can retry them.');
             }
         }
@@ -330,10 +343,16 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
             const response = await translateArticleSegment({ text: segment.original, target_language: 'zh-CN' });
             updateTranslationSegment(index, { translation: response.translation, status: 'done' });
         } catch (err) {
+            const error = err as Error & { status?: number; detail?: string };
+            const isRateLimited = error.status === 429 || /rate|429/i.test(error.message || '') || /rate|429/i.test(error.detail || '');
             updateTranslationSegment(index, {
                 status: 'error',
-                error: err instanceof Error ? err.message : 'Translation failed',
+                error: error.message || 'Translation failed',
             });
+            if (isRateLimited) {
+                setTranslationError('Translation is rate-limited by the backend (HTTP 429). Please wait a moment and retry.');
+                return;
+            }
             setTranslationError('Some segments failed to translate. You can retry them.');
         }
     };
@@ -394,50 +413,53 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-6 py-12 md:px-24 lg:px-48 scroll-smooth">
-                    <div className="max-w-3xl mx-auto">
-                        <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-2 leading-tight">
-                            {article.title}
-                        </h1>
-                        <div className="flex items-center space-x-3 mb-8">
-                            <span className="px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded shadow-sm">
-                                {article.source}
-                            </span>
-                            <span className="text-sm font-medium text-slate-400">
-                                {article.source_name || 'Original Content'}
-                            </span>
-                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                            <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">
-                                {article.category}
-                            </span>
+                <div className="flex-1 overflow-y-auto px-6 py-12 md:px-24 lg:px-32 scroll-smooth">
+                    <div className={`mx-auto grid gap-8 ${isTranslationOpen ? 'max-w-6xl lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]' : 'max-w-3xl'}`}>
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-2 leading-tight">
+                                {article.title}
+                            </h1>
+                            <div className="flex items-center space-x-3 mb-8">
+                                <span className="px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded shadow-sm">
+                                    {article.source}
+                                </span>
+                                <span className="text-sm font-medium text-slate-400">
+                                    {article.source_name || 'Original Content'}
+                                </span>
+                                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                                    {article.category}
+                                </span>
+                            </div>
+
+                            <div
+                                className="prose prose-slate dark:prose-invert max-w-none leading-relaxed"
+                                style={{ fontSize: `${fontSize}px` }}
+                            >
+                                {mode === 'clean' ? (
+                                    <ReactMarkdown>{article.content || ''}</ReactMarkdown>
+                                ) : (
+                                    // For learning mode, we still use the segments, but we wrap in pre-wrap to preserve existing newlines
+                                    <div className="whitespace-pre-wrap">
+                                        {segments.map((segment, idx) => (
+                                            <span
+                                                key={idx}
+                                                className={segment.highlight ? getHighlightClass(segment.type) : ''}
+                                                onClick={() => segment.highlight && setSelectedHighlight(segment.highlight)}
+                                            >
+                                                {segment.text}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        <div
-                            className="prose prose-slate dark:prose-invert max-w-none leading-relaxed"
-                            style={{ fontSize: `${fontSize}px` }}
-                        >
-                            {mode === 'clean' ? (
-                                <ReactMarkdown>{article.content || ''}</ReactMarkdown>
-                            ) : (
-                                // For learning mode, we still use the segments, but we wrap in pre-wrap to preserve existing newlines
-                                <div className="whitespace-pre-wrap">
-                                    {segments.map((segment, idx) => (
-                                        <span
-                                            key={idx}
-                                            className={segment.highlight ? getHighlightClass(segment.type) : ''}
-                                            onClick={() => segment.highlight && setSelectedHighlight(segment.highlight)}
-                                        >
-                                            {segment.text}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
                         {isTranslationOpen && (
-                            <div className="mt-10 space-y-4">
+                            <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                                        Progressive Translation
+                                        Translation
                                     </h3>
                                     {translationProgress.total > 0 && (
                                         <span className="text-xs text-slate-500">
@@ -452,7 +474,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                 )}
                                 <div className="space-y-3">
                                     {translationSegments.map((segment, index) => (
-                                        <div key={segment.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                        <div key={segment.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[11px] uppercase text-slate-400">Segment {index + 1}</span>
                                                 <div className="flex items-center gap-2 text-[11px] font-semibold">
@@ -473,31 +495,26 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                                <div className="rounded-xl bg-slate-50 p-4 text-xs text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
-                                                    {segment.original}
-                                                </div>
-                                                <div className="rounded-xl bg-blue-50 p-4 text-xs text-slate-700 dark:bg-blue-900/30 dark:text-slate-200">
-                                                    {segment.status === 'loading' && (
-                                                        <span className="text-blue-500">Loading translation...</span>
-                                                    )}
-                                                    {segment.status === 'pending' && (
-                                                        <span className="text-slate-400">Waiting to translate</span>
-                                                    )}
-                                                    {segment.status === 'error' && (
-                                                        <div className="space-y-2">
-                                                            <p className="text-red-500 text-xs">{segment.error || 'Translation failed.'}</p>
-                                                            <button
-                                                                onClick={() => void retrySegment(index)}
-                                                                className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-1 text-[11px] font-semibold text-white"
-                                                            >
-                                                                <RotateCcw size={12} />
-                                                                Retry
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                    {segment.status === 'done' && segment.translation}
-                                                </div>
+                                            <div className="mt-3 rounded-xl bg-blue-50 p-4 text-xs text-slate-700 dark:bg-blue-900/30 dark:text-slate-200">
+                                                {segment.status === 'loading' && (
+                                                    <span className="text-blue-500">Loading translation...</span>
+                                                )}
+                                                {segment.status === 'pending' && (
+                                                    <span className="text-slate-400">Waiting to translate</span>
+                                                )}
+                                                {segment.status === 'error' && (
+                                                    <div className="space-y-2">
+                                                        <p className="text-red-500 text-xs">{segment.error || 'Translation failed.'}</p>
+                                                        <button
+                                                            onClick={() => void retrySegment(index)}
+                                                            className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-1 text-[11px] font-semibold text-white"
+                                                        >
+                                                            <RotateCcw size={12} />
+                                                            Retry
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {segment.status === 'done' && segment.translation}
                                             </div>
                                         </div>
                                     ))}
