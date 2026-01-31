@@ -334,6 +334,8 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
             setIsTranslating(false);
             return;
         }
+        setMode('clean');
+        setSelectedHighlight(null);
         if (!article.content) return;
         if (translationSegments.length === 0) {
             const segments = buildTranslationSegments(article.content).map((segment, index) => ({
@@ -413,6 +415,9 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             onClick={() => {
                                 setMode('learning');
                                 setSelectedHighlight(null);
+                                setIsTranslationOpen(false);
+                                translationRunRef.current = 0;
+                                setIsTranslating(false);
                             }}
                             className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${mode === 'learning' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500'
                                 }`}
@@ -422,31 +427,33 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                         </button>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                        <button
-                            onClick={() => void handleTranslateToggle()}
-                            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                isTranslationOpen
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-white text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-200'
-                            }`}
-                        >
-                            <Languages size={14} />
-                            Translate
-                        </button>
-                        {isTranslationOpen && (
+                    {mode === 'clean' && (
+                        <div className="flex items-center space-x-2">
                             <button
-                                onClick={() => void handleRefreshTranslation()}
-                                className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                onClick={() => void handleTranslateToggle()}
+                                className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                                    isTranslationOpen
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-white text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-200'
+                                }`}
                             >
-                                <RotateCcw size={14} />
-                                Refresh
+                                <Languages size={14} />
+                                Translate
                             </button>
-                        )}
-                        <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
-                            <Settings size={20} />
-                        </button>
-                    </div>
+                            {isTranslationOpen && (
+                                <button
+                                    onClick={() => void handleRefreshTranslation()}
+                                    className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                >
+                                    <RotateCcw size={14} />
+                                    Refresh
+                                </button>
+                            )}
+                            <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
+                                <Settings size={20} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-6 py-12 md:px-24 lg:px-32 scroll-smooth">
@@ -514,7 +521,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                             )}
                         </div>
 
-                        {isTranslationOpen && (
+                        {isTranslationOpen && mode === 'clean' && (
                             <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -600,7 +607,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                 </div>
             </div>
 
-            {mode === 'learning' && (
+            {mode === 'learning' && !isTranslationOpen && (
                 <div className={`w-full md:w-80 lg:w-96 border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col animate-in slide-in-from-right duration-300`}>
                     <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                         <h2 className="font-bold text-slate-900 dark:text-white flex items-center space-x-2">
