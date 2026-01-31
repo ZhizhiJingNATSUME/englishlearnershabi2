@@ -45,6 +45,7 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
     const [isTranslating, setIsTranslating] = useState(false);
     const [translationProgress, setTranslationProgress] = useState({ current: 0, total: 0 });
     const [translationError, setTranslationError] = useState('');
+    const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState<number | null>(null);
     const fontSize = 18; // Fixed font size for now
     const translationRunRef = useRef(0);
 
@@ -222,6 +223,19 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
         return result;
     };
 
+    const visualSegments = useMemo(() => {
+        if (!article.content) return [];
+        if (translationSegments.length > 0) {
+            return translationSegments;
+        }
+        return buildTranslationSegments(article.content).map((segment, index) => ({
+            id: `${article.id}-${index}`,
+            original: segment,
+            translation: '',
+            status: 'pending' as const,
+        }));
+    }, [article.content, article.id, translationSegments]);
+
     useEffect(() => {
         translationRunRef.current = 0;
         setIsTranslating(false);
@@ -359,9 +373,6 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
 
     return (
         <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950 flex flex-col md:flex-row animate-in fade-in duration-300">
-            {/* ... sidebar/header code remains implicit or I should include enough context ... */}
-            {/* I'll target the content rendering part mainly */}
-            {/* Wait, replace_file_content works on line ranges. I should check lines again */}
 
             <div className="flex-1 flex flex-col relative overflow-hidden h-full">
                 {/* Header... */}
@@ -431,28 +442,51 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                     {article.category}
                                 </span>
                             </div>
-
-                            <div
-                                className="prose prose-slate dark:prose-invert max-w-none leading-relaxed"
-                                style={{ fontSize: `${fontSize}px` }}
-                            >
-                                {mode === 'clean' ? (
-                                    <ReactMarkdown>{article.content || ''}</ReactMarkdown>
-                                ) : (
-                                    // For learning mode, we still use the segments, but we wrap in pre-wrap to preserve existing newlines
-                                    <div className="whitespace-pre-wrap">
-                                        {segments.map((segment, idx) => (
-                                            <span
-                                                key={idx}
-                                                className={segment.highlight ? getHighlightClass(segment.type) : ''}
-                                                onClick={() => segment.highlight && setSelectedHighlight(segment.highlight)}
-                                            >
-                                                {segment.text}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            {!isTranslationOpen ? (
+                                <div
+                                    className="prose prose-slate dark:prose-invert max-w-none leading-relaxed"
+                                    style={{ fontSize: `${fontSize}px` }}
+                                >
+                                    {mode === 'clean' ? (
+                                        <ReactMarkdown>{article.content || ''}</ReactMarkdown>
+                                    ) : (
+                                        // For learning mode, we still use the segments, but we wrap in pre-wrap to preserve existing newlines
+                                        <div className="whitespace-pre-wrap">
+                                            {segments.map((segment, idx) => (
+                                                <span
+                                                    key={idx}
+                                                    className={segment.highlight ? getHighlightClass(segment.type) : ''}
+                                                    onClick={() => segment.highlight && setSelectedHighlight(segment.highlight)}
+                                                >
+                                                    {segment.text}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {visualSegments.map((segment, index) => (
+                                        <div
+                                            key={segment.id}
+                                            className={`rounded-2xl border p-4 text-sm leading-relaxed transition ${
+                                                hoveredSegmentIndex === index
+                                                    ? 'border-blue-300 bg-blue-50 shadow-sm dark:border-blue-700 dark:bg-blue-900/30'
+                                                    : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950'
+                                            }`}
+                                        >
+                                            <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-100">
+                                                {segment.original}
+                                            </p>
+                                        </div>
+                                    ))}
+                                    {translationSegments.length === 0 && (
+                                        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700">
+                                            No translation yet. Tap “Translate” to begin.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {isTranslationOpen && (
@@ -474,7 +508,12 @@ const Reader: React.FC<ReaderProps> = ({ article, analysis, onClose, onSaveVocab
                                 )}
                                 <div className="space-y-3">
                                     {translationSegments.map((segment, index) => (
-                                        <div key={segment.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                        <div
+                                            key={segment.id}
+                                            onMouseEnter={() => setHoveredSegmentIndex(index)}
+                                            onMouseLeave={() => setHoveredSegmentIndex(null)}
+                                            className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[11px] uppercase text-slate-400">Segment {index + 1}</span>
                                                 <div className="flex items-center gap-2 text-[11px] font-semibold">
