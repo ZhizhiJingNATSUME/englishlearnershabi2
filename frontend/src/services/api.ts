@@ -228,5 +228,14 @@ export const getProficiencyEstimate = async (data: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
-    }));
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Network response was not ok' }));
+        const message = error.error || error.message || 'API request failed';
+        const err = new Error(message) as Error & { status?: number; detail?: string };
+        err.status = response.status;
+        err.detail = error.detail;
+        throw err;
+    }
+    return response.json();
 };
